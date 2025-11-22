@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StrudelPlayer from './components/StrudelPlayer';
 import { generateStrudelCode, defaultModels } from './lib/openrouter';
-import { Send, Settings, Play, StopCircle, Music, Terminal } from 'lucide-react';
+import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import } from 'lucide-react';
 
 function App() {
     const [apiKey, setApiKey] = useState(localStorage.getItem('openrouter_api_key') || '');
-    const [model, setModel] = useState(localStorage.getItem('openrouter_model') || defaultModels[0].id);
-    const [customModel, setCustomModel] = useState(localStorage.getItem('openrouter_custom_model') || '');
+
+    // Model Management State
+    const [savedModels, setSavedModels] = useState(() => {
+        const saved = localStorage.getItem('openrouter_saved_models');
+        return saved ? JSON.parse(saved) : [
+            { id: "moonshotai/kimi-k2:free", name: "Kimi K2 (Free)" },
+        ];
+    });
+    const [model, setModel] = useState(localStorage.getItem('openrouter_model') || "moonshotai/kimi-k2:free");
+
+    // New Model Input State
+    const [newModelId, setNewModelId] = useState('');
+    const [newModelName, setNewModelName] = useState('');
+
     const [chatHistory, setChatHistory] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -24,8 +36,8 @@ function App() {
     }, [model]);
 
     useEffect(() => {
-        localStorage.setItem('openrouter_custom_model', customModel);
-    }, [customModel]);
+        localStorage.setItem('openrouter_saved_models', JSON.stringify(savedModels));
+    }, [savedModels]);
 
     useEffect(() => {
         if (chatContainerRef.current) {
@@ -47,8 +59,7 @@ function App() {
         setIsLoading(true);
 
         try {
-            const selectedModel = customModel.trim() || model;
-            const response = await generateStrudelCode(apiKey, selectedModel, chatHistory, input);
+            const response = await generateStrudelCode(apiKey, model, chatHistory, input);
 
             setChatHistory(prev => [...prev, response]);
             setCurrentCode(response.content);
@@ -94,7 +105,12 @@ function App() {
                             <h2 className="text-xl font-bold mb-4 text-cyber-neon">Configuration</h2>
 
                             <div className="mb-4">
-                                <label className="block text-sm text-gray-400 mb-1">OpenRouter API Key</label>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-sm text-gray-400">OpenRouter API Key</label>
+                                    <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-cyber-neon hover:underline">
+                                        Get Key
+                                    </a>
+                                </div>
                                 <input
                                     type="password"
                                     value={apiKey}
@@ -105,23 +121,74 @@ function App() {
                             </div>
 
                             <div className="mb-4">
-                                <label className="block text-sm text-gray-400 mb-1">Model</label>
-                                <select
-                                    value={model}
-                                    onChange={(e) => setModel(e.target.value)}
-                                    className="w-full bg-cyber-black border border-cyber-gray p-2 rounded focus:border-cyber-cyan focus:outline-none text-white mb-2"
-                                >
-                                    {defaultModels.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                <label className="block text-sm text-gray-400 mb-2">Model Bookmarks</label>
+
+                                {/* Model List */}
+                                <div className="space-y-2 mb-4 max-h-40 overflow-y-auto">
+                                    {savedModels.map(m => (
+                                        <div
+                                            key={m.id}
+                                            className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${model === m.id
+                                                ? 'bg-cyber-neon/10 border-cyber-neon text-cyber-neon'
+                                                : 'bg-cyber-black border-cyber-gray text-gray-300 hover:border-cyber-cyan'
+                                                }`}
+                                            onClick={() => setModel(m.id)}
+                                        >
+                                            <span className="text-sm truncate flex-1">{m.name || m.id}</span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSavedModels(prev => prev.filter(sm => sm.id !== m.id));
+                                                    if (model === m.id && savedModels.length > 1) {
+                                                        setModel(savedModels.find(sm => sm.id !== m.id)?.id || '');
+                                                    }
+                                                }}
+                                                className="p-1 hover:text-red-500 text-gray-500"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     ))}
-                                </select>
-                                <input
-                                    type="text"
-                                    value={customModel}
-                                    onChange={(e) => setCustomModel(e.target.value)}
-                                    className="w-full bg-cyber-black border border-cyber-gray p-2 rounded focus:border-cyber-cyan focus:outline-none text-white"
-                                    placeholder="Or enter custom model ID..."
-                                />
+                                </div>
+
+                                {/* Add New Model */}
+                                <div className="bg-cyber-black p-3 rounded border border-cyber-gray">
+                                    <div className="text-xs text-gray-500 mb-2 uppercase tracking-wider flex justify-between items-center">
+                                        <span>Add New Model</span>
+                                        <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-cyber-neon hover:underline normal-case">
+                                            Find Models
+                                        </a>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={newModelId}
+                                        onChange={(e) => setNewModelId(e.target.value)}
+                                        className="w-full bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white mb-2 focus:border-cyber-neon focus:outline-none"
+                                        placeholder="Model ID (e.g. openai/gpt-4o)"
+                                    />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={newModelName}
+                                            onChange={(e) => setNewModelName(e.target.value)}
+                                            className="flex-1 bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white focus:border-cyber-neon focus:outline-none"
+                                            placeholder="Display Name"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (newModelId && newModelName) {
+                                                    setSavedModels(prev => [...prev, { id: newModelId, name: newModelName }]);
+                                                    setNewModelId('');
+                                                    setNewModelName('');
+                                                }
+                                            }}
+                                            disabled={!newModelId || !newModelName}
+                                            className="bg-cyber-gray hover:bg-cyber-neon hover:text-black text-cyber-cyan p-2 rounded transition-colors disabled:opacity-50"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <button
@@ -164,8 +231,8 @@ function App() {
                                                     className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
                                                     title="Run in Player"
                                                 >
-                                                    <Play className="w-3 h-3" />
-                                                    Run
+                                                    <Import className="w-3 h-3" />
+                                                    Import
                                                 </button>
                                             </div>
                                             <pre className="whitespace-pre-wrap break-words text-sm">{msg.content}</pre>
@@ -208,7 +275,7 @@ function App() {
                 </div>
 
                 {/* Strudel Embed Section */}
-                <div className="w-full md:w-1/2 h-[50vh] md:h-full bg-black">
+                <div className="w-full md:w-1/2 h-1/2 md:h-full bg-black flex flex-col">
                     <StrudelPlayer code={currentCode} />
                 </div>
 

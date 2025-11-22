@@ -25,16 +25,25 @@ body {
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-cyber-dark;
+  background: #050505;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-cyber-gray rounded;
+  background: #333;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-cyber-neon;
+  background: #00f3ff;
+}
+
+/* Strudel Embed Override */
+strudel-repl iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none;
 }

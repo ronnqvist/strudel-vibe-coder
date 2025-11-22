@@ -8,7 +8,7 @@ const StrudelPlayer = ({ code }) => {
             <strudel-repl
                 key={code} // Force remount when code changes
                 code={code}
-                style={{ width: '100%', height: '100%', display: 'block' }}
+                style={{ width: '100%', height: '100%', display: 'block', border: 'none' }}
             ></strudel-repl>
         </div>
     );
