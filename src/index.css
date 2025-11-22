@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cyber-black: #0a0a0a;
+  --color-cyber-dark: #121212;
+  --color-cyber-gray: #1e1e1e;
+  --color-cyber-neon: #ff00ff;
+  --color-cyber-cyan: #00ffff;
+  --color-cyber-green: #00ff00;
+  --font-mono: "Fira Code", monospace;
+}
+
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-cyber-black text-white font-mono;
+  margin: 0;
+  overflow: hidden;
+  /* Prevent scrollbars if we use full height */
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-cyber-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-cyber-gray rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-cyber-neon;
+}
