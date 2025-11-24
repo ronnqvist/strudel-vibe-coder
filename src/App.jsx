@@ -59,10 +59,20 @@ function App() {
         setIsLoading(true);
 
         try {
-            const response = await generateStrudelCode(apiKey, model, chatHistory, input);
+            // Filter chat history to only send role and content to the API
+            const apiChatHistory = chatHistory.map(msg => ({
+                role: msg.role,
+                content: msg.content
+            }));
+
+            const response = await generateStrudelCode(apiKey, model, apiChatHistory, input);
 
             setChatHistory(prev => [...prev, response]);
-            setCurrentCode(response.content);
+
+            // Only update the player if code was extracted
+            if (response.code) {
+                setCurrentCode(response.code);
+            }
         } catch (error) {
             setChatHistory(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
         } finally {
