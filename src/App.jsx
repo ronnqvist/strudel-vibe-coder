@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StrudelPlayer from './components/StrudelPlayer';
 import { generateStrudelCode, defaultModels } from './lib/openrouter';
-import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X } from 'lucide-react';
+import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save } from 'lucide-react';
 import { extractCode, generateId, formatDate } from './lib/utils';
 
 function App() {
@@ -20,6 +20,9 @@ function App() {
     // New Model Input State
     // newModelId is now synonymous with 'model' (active model)
     const [newModelName, setNewModelName] = useState('');
+    const [editingChatId, setEditingChatId] = useState(null);
+    const [editChatName, setEditChatName] = useState('');
+    const [editingMessage, setEditingMessage] = useState({ index: null, content: '' });
 
     const [chats, setChats] = useState(() => {
         const saved = localStorage.getItem('openrouter_chats');
@@ -85,13 +88,18 @@ function App() {
     const createNewChat = () => {
         const newChat = {
             id: generateId(),
-            name: `Chat ${new Date().toLocaleTimeString()}`,
+            name: `New Chat`,
             messages: [],
             createdAt: new Date().toISOString()
         };
         setChats(prev => [newChat, ...prev]);
         setCurrentChatId(newChat.id);
         setShowChats(false);
+    };
+
+    const updateChatName = (id, newName) => {
+        setChats(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c));
+        setEditingChatId(null);
     };
 
     const deleteChat = (id, e) => {
@@ -196,6 +204,19 @@ function App() {
         ));
     };
 
+    const saveMessageEdit = () => {
+        if (editingMessage.index === null) return;
+
+        const updatedMessages = [...chatHistory];
+        updatedMessages[editingMessage.index] = {
+            ...updatedMessages[editingMessage.index],
+            content: editingMessage.content
+        };
+
+        updateCurrentChatMessages(updatedMessages);
+        setEditingMessage({ index: null, content: '' });
+    };
+
     const handleSend = async () => {
         if (!input.trim()) return;
         if (!apiKey) {
@@ -223,13 +244,23 @@ function App() {
                 content: msg.content
             }));
 
-            const response = await generateStrudelCode(apiKey, model, apiChatHistory, input);
-
             // Attach model name to the response message
             const modelName = savedModels.find(m => m.id === model)?.name || model;
+            const response = await generateStrudelCode(apiKey, model, apiChatHistory, input, modelName);
+
             const responseWithModel = { ...response, model: modelName };
 
-            updateCurrentChatMessages([...updatedMessages, responseWithModel]);
+            // Update chat name if it's the first message and name is default
+            let newName = currentChat.name;
+            if (chatHistory.length === 0 && (currentChat.name === 'New Chat' || currentChat.name.startsWith('Chat '))) {
+                newName = input.slice(0, 30) + (input.length > 30 ? '...' : '');
+            }
+
+            setChats(prev => prev.map(c =>
+                c.id === currentChatId
+                    ? { ...c, messages: [...updatedMessages, responseWithModel], name: newName }
+                    : c
+            ));
 
             // Only update the player if code was extracted
             if (response.code) {
@@ -330,6 +361,17 @@ function App() {
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
+                                                setEditingChatId(chat.id);
+                                                setEditChatName(chat.name);
+                                            }}
+                                            className="p-2 hover:text-cyber-neon text-gray-500 transition-colors"
+                                            title="Rename Chat"
+                                        >
+                                            <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
                                                 handleExportChat(chat);
                                             }}
                                             className="p-2 hover:text-cyber-neon text-gray-500 transition-colors"
@@ -346,6 +388,90 @@ function App() {
                                         </button>
                                     </div>
                                 </div>
+                            ))}
+                            {/* Edit Chat Name Modal/Input Overlay could be better, but inline is fine too. 
+                                Actually, let's do inline replacement for the chat item if editing.
+                            */}
+                        </div>
+                    </div>
+                )}
+
+                {/* Re-render chat list to handle inline editing properly */}
+                {showChats && editingChatId && (
+                    <div className="absolute top-0 left-0 w-full md:w-1/2 h-full bg-cyber-black/95 backdrop-blur-md z-40 flex flex-col border-r border-cyber-neon/30">
+                        <div className="p-4 border-b border-cyber-gray flex justify-between items-center bg-cyber-dark">
+                            <h2 className="text-xl font-bold text-cyber-neon">Chats</h2>
+                            <button onClick={() => { setShowChats(false); setEditingChatId(null); }} className="p-2 hover:bg-cyber-gray rounded text-gray-400"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {chats.map(chat => (
+                                chat.id === editingChatId ? (
+                                    <div key={chat.id} className="flex items-center gap-2 p-3 rounded-lg border border-cyber-neon bg-cyber-neon/10">
+                                        <input
+                                            autoFocus
+                                            value={editChatName}
+                                            onChange={(e) => setEditChatName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') updateChatName(chat.id, editChatName);
+                                                if (e.key === 'Escape') setEditingChatId(null);
+                                            }}
+                                            className="flex-1 bg-transparent border-none focus:outline-none text-white font-bold"
+                                        />
+                                        <button onClick={() => updateChatName(chat.id, editChatName)} className="text-green-500 hover:text-green-400"><Check className="w-4 h-4" /></button>
+                                        <button onClick={() => setEditingChatId(null)} className="text-red-500 hover:text-red-400"><X className="w-4 h-4" /></button>
+                                    </div>
+                                ) : (
+                                    <div
+                                        key={chat.id}
+                                        onClick={() => {
+                                            setCurrentChatId(chat.id);
+                                            setShowChats(false);
+                                        }}
+                                        className={`group flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${currentChatId === chat.id
+                                            ? 'bg-cyber-neon/10 border-cyber-neon text-cyber-neon shadow-[0_0_10px_rgba(255,0,255,0.2)]'
+                                            : 'bg-cyber-dark border-cyber-gray text-gray-300 hover:border-cyber-cyan'
+                                            }`}
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-bold truncate">{chat.name}</div>
+                                            <div className="text-xs opacity-60 flex gap-2">
+                                                <span>{chat.messages.length} msgs</span>
+                                                <span>•</span>
+                                                <span>{formatDate(chat.createdAt)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingChatId(chat.id);
+                                                    setEditChatName(chat.name);
+                                                }}
+                                                className="p-2 hover:text-cyber-neon text-gray-500 transition-colors"
+                                                title="Rename Chat"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleExportChat(chat);
+                                                }}
+                                                className="p-2 hover:text-cyber-neon text-gray-500 transition-colors"
+                                                title="Export Chat"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => deleteChat(chat.id, e)}
+                                                className="p-2 hover:text-red-500 text-gray-500 transition-colors"
+                                                title="Delete Chat"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
                             ))}
                         </div>
                     </div>
@@ -474,37 +600,69 @@ function App() {
                             </div>
                         )}
                         {chatHistory.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] p-3 rounded-lg ${msg.role === 'user'
+                            <div key={idx} className={`flex ${editingMessage.index === idx ? 'w-full' : (msg.role === 'user' ? 'justify-end' : 'justify-start')}`}>
+                                <div className={`${editingMessage.index === idx ? 'w-full' : 'max-w-[80%]'} p-3 rounded-lg ${msg.role === 'user'
                                     ? 'bg-cyber-gray text-white border border-cyber-gray'
                                     : 'bg-cyber-black text-cyber-cyan border border-cyber-cyan/30'
                                     }`}>
-                                    {msg.role === 'assistant' ? (
-                                        <div className="font-mono text-xs opacity-80">
-                                            {/* Truncate code for display if too long, or just show a "Code Generated" badge? 
-                          Let's show the code but maybe styled simply. */}
-                                            <div className="flex items-center justify-between mb-2 border-b border-cyber-gray/50 pb-2">
-                                                <div className="flex items-center gap-2 text-cyber-neon">
-                                                    <Terminal className="w-3 h-3" />
-                                                    <span className="font-bold">Generated Code</span>
-                                                    {msg.model && <span className="text-[10px] text-gray-500 ml-2 border border-gray-700 px-1 rounded">{msg.model}</span>}
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        const code = extractCode(msg.content);
-                                                        if (code) setCurrentCode(code);
-                                                    }}
-                                                    className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
-                                                    title="Run in Player"
-                                                >
-                                                    <Import className="w-3 h-3" />
-                                                    Import
-                                                </button>
+                                    {editingMessage.index === idx ? (
+                                        <div className="w-full">
+                                            <textarea
+                                                value={editingMessage.content}
+                                                onChange={(e) => setEditingMessage({ ...editingMessage, content: e.target.value })}
+                                                className="w-full bg-cyber-black/50 text-white p-2 rounded border border-cyber-neon/50 focus:outline-none font-mono text-sm h-32"
+                                            />
+                                            <div className="flex justify-end gap-2 mt-2">
+                                                <button onClick={() => setEditingMessage({ index: null, content: '' })} className="p-1 text-red-400 hover:text-red-300"><X className="w-4 h-4" /></button>
+                                                <button onClick={saveMessageEdit} className="p-1 text-green-400 hover:text-green-300"><Save className="w-4 h-4" /></button>
                                             </div>
-                                            <pre className="whitespace-pre-wrap break-words text-sm">{msg.content}</pre>
                                         </div>
                                     ) : (
-                                        msg.content
+                                        <>
+                                            {msg.role === 'assistant' ? (
+                                                <div className="font-mono text-xs opacity-80">
+                                                    <div className="flex items-center justify-between mb-2 border-b border-cyber-gray/50 pb-2">
+                                                        <div className="flex items-center gap-2 text-cyber-neon">
+                                                            <Terminal className="w-3 h-3" />
+                                                            <span className="font-bold">Generated Code</span>
+                                                            {msg.model && <span className="text-[10px] text-gray-500 ml-2 border border-gray-700 px-1 rounded">{msg.model}</span>}
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            <button
+                                                                onClick={() => setEditingMessage({ index: idx, content: msg.content })}
+                                                                className="p-1 hover:text-cyber-neon text-gray-500 transition-colors"
+                                                                title="Edit Message"
+                                                            >
+                                                                <Edit2 className="w-3 h-3" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const code = extractCode(msg.content);
+                                                                    if (code) setCurrentCode(code);
+                                                                }}
+                                                                className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
+                                                                title="Run in Player"
+                                                            >
+                                                                <Import className="w-3 h-3" />
+                                                                Import
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <pre className="whitespace-pre-wrap break-words text-sm">{msg.content}</pre>
+                                                </div>
+                                            ) : (
+                                                <div className="relative group">
+                                                    <div className="pr-6">{msg.content}</div>
+                                                    <button
+                                                        onClick={() => setEditingMessage({ index: idx, content: msg.content })}
+                                                        className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 hover:text-cyber-neon text-gray-500 transition-all"
+                                                        title="Edit Message"
+                                                    >
+                                                        <Edit2 className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>
