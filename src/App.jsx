@@ -32,7 +32,7 @@ function App() {
 
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [currentCode, setCurrentCode] = useState('note("c3 eb3 g3 bb3").s("sawtooth").lpf(1000).lpq(2)');
+    const [currentCode, setCurrentCode] = useState(localStorage.getItem('openrouter_current_code') || '');
     const [showSettings, setShowSettings] = useState(false);
     const [showChats, setShowChats] = useState(false);
 
@@ -58,6 +58,10 @@ function App() {
     useEffect(() => {
         localStorage.setItem('openrouter_current_chat_id', currentChatId);
     }, [currentChatId]);
+
+    useEffect(() => {
+        localStorage.setItem('openrouter_current_code', currentCode);
+    }, [currentCode]);
 
     // Initialize a chat if none exists
     useEffect(() => {
