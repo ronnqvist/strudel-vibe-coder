@@ -224,7 +224,11 @@ function App() {
 
             const response = await generateStrudelCode(apiKey, model, apiChatHistory, input);
 
-            updateCurrentChatMessages([...updatedMessages, response]);
+            // Attach model name to the response message
+            const modelName = savedModels.find(m => m.id === model)?.name || model;
+            const responseWithModel = { ...response, model: modelName };
+
+            updateCurrentChatMessages([...updatedMessages, responseWithModel]);
 
             // Only update the player if code was extracted
             if (response.code) {
@@ -281,6 +285,9 @@ function App() {
                         <div className="p-4 border-b border-cyber-gray flex justify-between items-center bg-cyber-dark">
                             <h2 className="text-xl font-bold text-cyber-neon">Chats</h2>
                             <div className="flex gap-2">
+                                <button onClick={createNewChat} className="p-2 hover:bg-cyber-gray rounded text-cyber-neon transition-colors" title="New Chat">
+                                    <Plus className="w-5 h-5" />
+                                </button>
                                 <label className="cursor-pointer p-2 hover:bg-cyber-gray rounded text-cyber-cyan transition-colors" title="Import Chat">
                                     <Upload className="w-5 h-5" />
                                     <input type="file" accept=".json" onChange={handleImportChat} className="hidden" />
@@ -298,14 +305,6 @@ function App() {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                            <button
-                                onClick={createNewChat}
-                                className="w-full py-3 border-2 border-dashed border-cyber-gray hover:border-cyber-neon text-gray-400 hover:text-cyber-neon rounded-lg transition-colors flex items-center justify-center gap-2 mb-4"
-                            >
-                                <Plus className="w-5 h-5" />
-                                <span>New Chat</span>
-                            </button>
-
                             {chats.map(chat => (
                                 <div
                                     key={chat.id}
@@ -478,6 +477,7 @@ function App() {
                                                 <div className="flex items-center gap-2 text-cyber-neon">
                                                     <Terminal className="w-3 h-3" />
                                                     <span className="font-bold">Generated Code</span>
+                                                    {msg.model && <span className="text-[10px] text-gray-500 ml-2 border border-gray-700 px-1 rounded">{msg.model}</span>}
                                                 </div>
                                                 <button
                                                     onClick={() => {
