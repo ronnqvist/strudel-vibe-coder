@@ -12,12 +12,13 @@ function App() {
         const saved = localStorage.getItem('openrouter_saved_models');
         return saved ? JSON.parse(saved) : [
             { id: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5" },
+            { id: "google/gemini-3-pro-preview", name: "Gemini 3 Pro" },
         ];
     });
     const [model, setModel] = useState(localStorage.getItem('openrouter_model') || "anthropic/claude-opus-4.5");
 
     // New Model Input State
-    const [newModelId, setNewModelId] = useState('');
+    // newModelId is now synonymous with 'model' (active model)
     const [newModelName, setNewModelName] = useState('');
 
     const [chats, setChats] = useState(() => {
@@ -384,7 +385,10 @@ function App() {
                                                 ? 'bg-cyber-neon/10 border-cyber-neon text-cyber-neon'
                                                 : 'bg-cyber-black border-cyber-gray text-gray-300 hover:border-cyber-cyan'
                                                 }`}
-                                            onClick={() => setModel(m.id)}
+                                            onClick={() => {
+                                                setModel(m.id);
+                                                setNewModelName(m.name);
+                                            }}
                                         >
                                             <span className="text-sm truncate flex-1">{m.name || m.id}</span>
                                             <button
@@ -406,15 +410,15 @@ function App() {
                                 {/* Add New Model */}
                                 <div className="bg-cyber-black p-3 rounded border border-cyber-gray">
                                     <div className="text-xs text-gray-500 mb-2 uppercase tracking-wider flex justify-between items-center">
-                                        <span>Add New Model</span>
+                                        <span>Model</span>
                                         <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-cyber-neon hover:underline normal-case">
                                             Find Models
                                         </a>
                                     </div>
                                     <input
                                         type="text"
-                                        value={newModelId}
-                                        onChange={(e) => setNewModelId(e.target.value)}
+                                        value={model}
+                                        onChange={(e) => setModel(e.target.value)}
                                         className="w-full bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white mb-2 focus:border-cyber-neon focus:outline-none"
                                         placeholder="Model ID (e.g. openai/gpt-4o)"
                                     />
@@ -428,13 +432,19 @@ function App() {
                                         />
                                         <button
                                             onClick={() => {
-                                                if (newModelId && newModelName) {
-                                                    setSavedModels(prev => [...prev, { id: newModelId, name: newModelName }]);
-                                                    setNewModelId('');
+                                                if (model && newModelName) {
+                                                    setSavedModels(prev => {
+                                                        // Update if exists, otherwise add
+                                                        const existing = prev.find(m => m.id === model);
+                                                        if (existing) {
+                                                            return prev.map(m => m.id === model ? { ...m, name: newModelName } : m);
+                                                        }
+                                                        return [...prev, { id: model, name: newModelName }];
+                                                    });
                                                     setNewModelName('');
                                                 }
                                             }}
-                                            disabled={!newModelId || !newModelName}
+                                            disabled={!model || !newModelName}
                                             className="bg-cyber-gray hover:bg-cyber-neon hover:text-black text-cyber-cyan p-2 rounded transition-colors disabled:opacity-50"
                                         >
                                             <Plus className="w-4 h-4" />
