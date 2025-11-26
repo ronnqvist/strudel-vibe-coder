@@ -11,10 +11,10 @@ function App() {
     const [savedModels, setSavedModels] = useState(() => {
         const saved = localStorage.getItem('openrouter_saved_models');
         return saved ? JSON.parse(saved) : [
-            { id: "moonshotai/kimi-k2:free", name: "Kimi K2 (Free)" },
+            { id: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5" },
         ];
     });
-    const [model, setModel] = useState(localStorage.getItem('openrouter_model') || "moonshotai/kimi-k2:free");
+    const [model, setModel] = useState(localStorage.getItem('openrouter_model') || "anthropic/claude-opus-4.5");
 
     // New Model Input State
     const [newModelId, setNewModelId] = useState('');
