@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StrudelPlayer from './components/StrudelPlayer';
 import { generateStrudelCode, defaultModels } from './lib/openrouter';
-import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import } from 'lucide-react';
+import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X } from 'lucide-react';
+import { extractCode, generateId, formatDate } from './lib/utils';
 
 function App() {
     const [apiKey, setApiKey] = useState(localStorage.getItem('openrouter_api_key') || '');
@@ -19,13 +20,24 @@ function App() {
     const [newModelId, setNewModelId] = useState('');
     const [newModelName, setNewModelName] = useState('');
 
-    const [chatHistory, setChatHistory] = useState([]);
+    const [chats, setChats] = useState(() => {
+        const saved = localStorage.getItem('openrouter_chats');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [currentChatId, setCurrentChatId] = useState(localStorage.getItem('openrouter_current_chat_id') || null);
+
+    // Derived state for current chat messages
+    const currentChat = chats.find(c => c.id === currentChatId);
+    const chatHistory = currentChat ? currentChat.messages : [];
+
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [currentCode, setCurrentCode] = useState('note("c3 eb3 g3 bb3").s("sawtooth").lpf(1000).lpq(2)');
     const [showSettings, setShowSettings] = useState(false);
+    const [showChats, setShowChats] = useState(false);
 
     const chatContainerRef = useRef(null);
+    const initializedRef = useRef(false);
 
     useEffect(() => {
         localStorage.setItem('openrouter_api_key', apiKey);
@@ -40,10 +52,144 @@ function App() {
     }, [savedModels]);
 
     useEffect(() => {
+        localStorage.setItem('openrouter_chats', JSON.stringify(chats));
+    }, [chats]);
+
+    useEffect(() => {
+        localStorage.setItem('openrouter_current_chat_id', currentChatId);
+    }, [currentChatId]);
+
+    // Initialize a chat if none exists
+    useEffect(() => {
+        if (initializedRef.current) return;
+        initializedRef.current = true;
+
+        if (chats.length === 0) {
+            createNewChat();
+        } else if (!currentChatId) {
+            setCurrentChatId(chats[0].id);
+        }
+    }, []);
+
+    useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [chatHistory]);
+
+    const createNewChat = () => {
+        const newChat = {
+            id: generateId(),
+            name: `Chat ${new Date().toLocaleTimeString()}`,
+            messages: [],
+            createdAt: new Date().toISOString()
+        };
+        setChats(prev => [newChat, ...prev]);
+        setCurrentChatId(newChat.id);
+        setShowChats(false);
+    };
+
+    const deleteChat = (id, e) => {
+        e.stopPropagation();
+        const newChats = chats.filter(c => c.id !== id);
+        setChats(newChats);
+        if (currentChatId === id) {
+            setCurrentChatId(newChats.length > 0 ? newChats[0].id : null);
+        }
+        if (newChats.length === 0) {
+            // If we deleted the last chat, create a new one immediately or handle empty state
+            // For simplicity, let's allow empty state but the effect above will likely create one
+        }
+    };
+
+    const deleteAllChats = () => {
+        if (window.confirm("Are you sure you want to delete all chats?")) {
+            setChats([]);
+            setCurrentChatId(null);
+            // Effect will trigger creation of new chat
+        }
+    };
+
+    const handleExportChat = (chatToExport) => {
+        const chat = chatToExport || currentChat;
+        if (!chat) return;
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(chat));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `strudel-chat-${chat.name}.json`);
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    };
+
+    const handleExportAllChats = () => {
+        if (chats.length === 0) return;
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(chats));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `strudel-chats-backup-${new Date().toISOString().slice(0, 10)}.json`);
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    };
+
+    const handleImportChat = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+
+                if (Array.isArray(importedData)) {
+                    // Handle multiple chats import (Export All format)
+                    const newChats = importedData.filter(chat =>
+                        chat.messages && Array.isArray(chat.messages)
+                    ).map(chat => ({
+                        ...chat,
+                        id: generateId(), // Always generate new IDs to avoid collisions
+                        name: chat.name || `Imported ${new Date().toLocaleTimeString()}`
+                    }));
+
+                    if (newChats.length > 0) {
+                        setChats(prev => [...newChats, ...prev]);
+                        setCurrentChatId(newChats[0].id);
+                        setShowChats(false);
+                        alert(`Successfully imported ${newChats.length} chats.`);
+                    } else {
+                        alert("No valid chats found in file.");
+                    }
+                } else if (importedData.messages && Array.isArray(importedData.messages)) {
+                    // Handle single chat import
+                    const newChat = {
+                        ...importedData,
+                        id: generateId(),
+                        name: importedData.name || `Imported ${new Date().toLocaleTimeString()}`
+                    };
+                    setChats(prev => [newChat, ...prev]);
+                    setCurrentChatId(newChat.id);
+                    setShowChats(false);
+                } else {
+                    alert("Invalid chat file format.");
+                }
+            } catch (error) {
+                console.error("Error importing chat:", error);
+                alert("Error importing chat file.");
+            }
+        };
+        reader.readAsText(file);
+        // Reset input
+        event.target.value = '';
+    };
+
+    const updateCurrentChatMessages = (newMessages) => {
+        setChats(prev => prev.map(c =>
+            c.id === currentChatId
+                ? { ...c, messages: newMessages }
+                : c
+        ));
+    };
 
     const handleSend = async () => {
         if (!input.trim()) return;
@@ -53,28 +199,35 @@ function App() {
             return;
         }
 
+        if (!currentChatId) {
+            createNewChat();
+        }
+
         const userMsg = { role: 'user', content: input };
-        setChatHistory(prev => [...prev, userMsg]);
+        // Optimistic update
+        const updatedMessages = [...chatHistory, userMsg];
+        updateCurrentChatMessages(updatedMessages);
+
         setInput('');
         setIsLoading(true);
 
         try {
             // Filter chat history to only send role and content to the API
-            const apiChatHistory = chatHistory.map(msg => ({
+            const apiChatHistory = updatedMessages.map(msg => ({
                 role: msg.role,
                 content: msg.content
             }));
 
             const response = await generateStrudelCode(apiKey, model, apiChatHistory, input);
 
-            setChatHistory(prev => [...prev, response]);
+            updateCurrentChatMessages([...updatedMessages, response]);
 
             // Only update the player if code was extracted
             if (response.code) {
                 setCurrentCode(response.code);
             }
         } catch (error) {
-            setChatHistory(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
+            updateCurrentChatMessages([...updatedMessages, { role: 'assistant', content: `Error: ${error.message}` }]);
         } finally {
             setIsLoading(false);
         }
@@ -97,16 +250,102 @@ function App() {
                         STRUDEL VIBE CODER
                     </h1>
                 </div>
-                <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="p-2 hover:bg-cyber-gray rounded-full transition-colors"
-                >
-                    <Settings className="w-5 h-5 text-cyber-cyan" />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowChats(!showChats)}
+                        className={`p-2 rounded-full transition-colors ${showChats ? 'bg-cyber-neon text-black' : 'hover:bg-cyber-gray text-cyber-cyan'}`}
+                        title="Chats"
+                    >
+                        <MessageSquare className="w-5 h-5" />
+                    </button>
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-cyber-neon text-black' : 'hover:bg-cyber-gray text-cyber-cyan'}`}
+                        title="Settings"
+                    >
+                        <Settings className="w-5 h-5" />
+                    </button>
+                </div>
             </header>
 
             {/* Main Content - Split View */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+
+                {/* Chats Overlay */}
+                {showChats && (
+                    <div className="absolute top-0 left-0 w-full md:w-1/2 h-full bg-cyber-black/95 backdrop-blur-md z-40 flex flex-col border-r border-cyber-neon/30">
+                        <div className="p-4 border-b border-cyber-gray flex justify-between items-center bg-cyber-dark">
+                            <h2 className="text-xl font-bold text-cyber-neon">Chats</h2>
+                            <div className="flex gap-2">
+                                <label className="cursor-pointer p-2 hover:bg-cyber-gray rounded text-cyber-cyan transition-colors" title="Import Chat">
+                                    <Upload className="w-5 h-5" />
+                                    <input type="file" accept=".json" onChange={handleImportChat} className="hidden" />
+                                </label>
+                                <button onClick={handleExportAllChats} className="p-2 hover:bg-cyber-gray rounded text-cyber-cyan transition-colors" title="Export All Chats">
+                                    <Download className="w-5 h-5" />
+                                </button>
+                                <button onClick={deleteAllChats} className="p-2 hover:bg-red-900/50 rounded text-red-500 transition-colors" title="Delete All Chats">
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => setShowChats(false)} className="p-2 hover:bg-cyber-gray rounded text-gray-400 transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            <button
+                                onClick={createNewChat}
+                                className="w-full py-3 border-2 border-dashed border-cyber-gray hover:border-cyber-neon text-gray-400 hover:text-cyber-neon rounded-lg transition-colors flex items-center justify-center gap-2 mb-4"
+                            >
+                                <Plus className="w-5 h-5" />
+                                <span>New Chat</span>
+                            </button>
+
+                            {chats.map(chat => (
+                                <div
+                                    key={chat.id}
+                                    onClick={() => {
+                                        setCurrentChatId(chat.id);
+                                        setShowChats(false);
+                                    }}
+                                    className={`group flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${currentChatId === chat.id
+                                        ? 'bg-cyber-neon/10 border-cyber-neon text-cyber-neon shadow-[0_0_10px_rgba(255,0,255,0.2)]'
+                                        : 'bg-cyber-dark border-cyber-gray text-gray-300 hover:border-cyber-cyan'
+                                        }`}
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-bold truncate">{chat.name}</div>
+                                        <div className="text-xs opacity-60 flex gap-2">
+                                            <span>{chat.messages.length} msgs</span>
+                                            <span>•</span>
+                                            <span>{formatDate(chat.createdAt)}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleExportChat(chat);
+                                            }}
+                                            className="p-2 hover:text-cyber-neon text-gray-500 transition-colors"
+                                            title="Export Chat"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => deleteChat(chat.id, e)}
+                                            className="p-2 hover:text-red-500 text-gray-500 transition-colors"
+                                            title="Delete Chat"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Settings Overlay */}
                 {showSettings && (
@@ -237,7 +476,10 @@ function App() {
                                                     <span className="font-bold">Generated Code</span>
                                                 </div>
                                                 <button
-                                                    onClick={() => setCurrentCode(msg.content)}
+                                                    onClick={() => {
+                                                        const code = extractCode(msg.content);
+                                                        if (code) setCurrentCode(code);
+                                                    }}
                                                     className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
                                                     title="Run in Player"
                                                 >
@@ -290,7 +532,7 @@ function App() {
                 </div>
 
             </div>
-        </div>
+        </div >
     );
 }
 
