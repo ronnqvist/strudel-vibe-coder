@@ -43,6 +43,18 @@ Strudel is a JavaScript-based implementation of TidalCycles for live coding musi
 - ❌ NO imperative array manipulation for sequences
 - ❌ NO undocumented methods: STRICTLY do NOT use any JavaScript methods, functions, or APIs that are not explicitly mentioned in this documentation. If it's not here, it likely doesn't exist in the Strudel REPL environment.
 
+## ⚠️ COMMON ERRORS TO AVOID - READ CAREFULLY:
+- ⚠️ "Error: got undefined instead of pattern": This is the #1 error. It happens when:
+  1. You declare a variable but don't use it in the final expression.
+  2. You use \`console.log()\` (returns undefined).
+  3. You use a function that doesn't return a pattern.
+  FIX: Ensure the LAST line of your code is the pattern you want to play, or explicitly call \`.out()\` on it. Do NOT leave dangling variable declarations.
+- ⚠️ "Error: .every() expects 2 inputs but got 3": .every() takes EXACTLY two arguments: (cycles, function). 
+  - WRONG: .every(4, 0.5, fast) 
+  - CORRECT: .every(4, x => x.fast(2))
+- ⚠️ "Error: .on() is not a function": .on() is deprecated or doesn't exist. Use .every() or .sometimes() instead.
+- ⚠️ "Error: .add() is not a function": Use stack() to layer patterns, not .add().
+
 ## ✅ CORRECT PATTERNS - ALWAYS USE:
 - ✅ Method chaining: note("c e g").s("piano").room(0.5)
 - ✅ Mini-notation for sequences: "bd sd [~ bd] sd"
