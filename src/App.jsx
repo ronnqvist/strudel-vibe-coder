@@ -13,6 +13,7 @@ function App() {
         return saved ? JSON.parse(saved) : [
             { id: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5" },
             { id: "google/gemini-3-pro-preview", name: "Gemini 3 Pro" },
+            { id: "openai/gpt-5.1", name: "GPT 5.1" },
         ];
     });
     const [model, setModel] = useState(localStorage.getItem('openrouter_model') || "anthropic/claude-opus-4.5");
@@ -701,7 +702,7 @@ function App() {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Describe the sound (e.g. 'acid techno bass')"
+                                placeholder={chatHistory.length > 0 ? "Suggest changes or paste in any error messages" : "Describe the sound (e.g. 'acid techno bass')"}
                                 className="flex-1 bg-cyber-dark border border-cyber-gray p-3 rounded-lg focus:border-cyber-neon focus:outline-none text-white placeholder-gray-600"
                                 disabled={isLoading}
                             />

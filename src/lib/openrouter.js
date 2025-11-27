@@ -5,6 +5,7 @@
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const defaultModels = [
+    { id: "openai/gpt-5.1", name: "GPT 5.1" },
     { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash (Free)" },
     { id: "google/gemini-2.0-pro-exp-02-05:free", name: "Gemini 2.0 Pro (Free)" },
     { id: "google/gemma-2-9b-it:free", name: "Gemma 2 9B (Free)" },
