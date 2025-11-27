@@ -585,10 +585,28 @@ function App() {
                             >
                                 Save & Close
                             </button>
+
+                            <div className="mt-4 text-center border-t border-cyber-gray pt-4 flex flex-col gap-2">
+                                <a
+                                    href="https://github.com/ronnqvist/strudel-vibe-coder"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-500 hover:text-cyber-neon transition-colors"
+                                >
+                                    View Source Code (GitHub)
+                                </a>
+                                <a
+                                    href="/LICENSE"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-500 hover:text-cyber-neon transition-colors"
+                                >
+                                    License (AGPL v3)
+                                </a>
+                            </div>
                         </div>
                     </div>
                 )}
-
                 {/* Chat Section */}
                 <div className="w-full md:w-1/2 flex flex-col border-r border-cyber-gray bg-cyber-dark/50">
                     <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={chatContainerRef}>
