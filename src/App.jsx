@@ -1,11 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StrudelPlayer from './components/StrudelPlayer';
 import { generateStrudelCode, defaultModels } from './lib/openrouter';
-import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save } from 'lucide-react';
+import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save, Info } from 'lucide-react';
 import { extractCode, generateId, formatDate } from './lib/utils';
 
 function App() {
     const [apiKey, setApiKey] = useState(localStorage.getItem('openrouter_api_key') || '');
+    const [hashApiKey, setHashApiKey] = useState('');
+
+    useEffect(() => {
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#sk-or-v1-')) {
+            setHashApiKey(hash.slice(1));
+        }
+    }, []);
+
+    const effectiveApiKey = hashApiKey || apiKey;
 
     // Model Management State
     const [savedModels, setSavedModels] = useState(() => {
@@ -220,7 +230,7 @@ function App() {
 
     const handleSend = async () => {
         if (!input.trim()) return;
-        if (!apiKey) {
+        if (!effectiveApiKey) {
             alert("Please enter your OpenRouter API Key in settings.");
             setShowSettings(true);
             return;
@@ -247,7 +257,7 @@ function App() {
 
             // Attach model name to the response message
             const modelName = savedModels.find(m => m.id === model)?.name || model;
-            const response = await generateStrudelCode(apiKey, model, apiChatHistory, input, modelName);
+            const response = await generateStrudelCode(effectiveApiKey, model, apiChatHistory, input, modelName);
 
             const responseWithModel = { ...response, model: modelName };
 
@@ -483,6 +493,13 @@ function App() {
                     <div className="absolute top-0 left-0 w-full h-full bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                         <div className="bg-cyber-dark border border-cyber-neon p-6 rounded-lg w-full max-w-md shadow-[0_0_20px_rgba(255,0,255,0.3)]">
                             <h2 className="text-xl font-bold mb-4 text-cyber-neon">Configuration</h2>
+
+                            {hashApiKey && (
+                                <div className="bg-blue-900/30 border border-blue-500/50 p-3 rounded mb-4 text-sm text-blue-200 flex items-center gap-2">
+                                    <Info className="w-4 h-4" />
+                                    You are using a temporary API key provided via the URL.
+                                </div>
+                            )}
 
                             <div className="mb-4">
                                 <div className="flex justify-between items-center mb-1">
