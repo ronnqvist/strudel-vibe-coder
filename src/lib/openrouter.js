@@ -27,6 +27,9 @@ IMPORTANT: Unless the user explicitly asks you NOT to include visuals, ALWAYS in
 ## Add Live Coding Comments by Default
 IMPORTANT: Unless the user explicitly asks you NOT to include comments, ALWAYS add helpful inline comments that explain what each section does. These comments should help a newbie understand how to modify and "live code" with the Strudel patterns. Explain key parameters, suggest variations, and note what can be tweaked in real-time.
 
+## Use Only ASCII Characters
+CRITICAL: Use ONLY standard ASCII characters in your code and comments. Do NOT use Unicode characters like smart quotes (", ", ', '), em dashes (—), or any other non-Latin1 characters. Use straight quotes (", ') and regular hyphens (-) only. This prevents encoding errors in the Strudel REPL.
+
 # CRITICAL: What Strudel IS and IS NOT
 
 Strudel is a JavaScript-based implementation of TidalCycles for live coding music in the browser. It uses FUNCTIONAL REACTIVE PROGRAMMING with pattern-based composition, NOT imperative JavaScript.
@@ -38,6 +41,7 @@ Strudel is a JavaScript-based implementation of TidalCycles for live coding musi
 - ❌ NO setInterval, setTimeout, or other timing functions
 - ❌ NO nested function calls like s("piano", note("c e g"))
 - ❌ NO imperative array manipulation for sequences
+- ❌ NO undocumented methods: STRICTLY do NOT use any JavaScript methods, functions, or APIs that are not explicitly mentioned in this documentation. If it's not here, it likely doesn't exist in the Strudel REPL environment.
 
 ## ✅ CORRECT PATTERNS - ALWAYS USE:
 - ✅ Method chaining: note("c e g").s("piano").room(0.5)
