@@ -28,4 +28,9 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Tests and tool configuration run in Node, not in the browser
+    files: ['e2e/**/*.js', 'playwright.config.js', 'scripts/**/*.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 ])
