@@ -1,18 +1,8 @@
 // SPDX-License-Identifier: MIT
 import { useEffect, useState } from 'react';
 import { CHATS_KEY, CURRENT_CHAT_KEY, createChat, loadInitialChats, removeChat, resetChats } from '../lib/chats';
-import { generateId } from '../lib/utils';
-
-function download(href, filename) {
-    const a = document.createElement('a');
-    a.setAttribute('href', href);
-    a.setAttribute('download', filename);
-    document.body.appendChild(a); // required for firefox
-    a.click();
-    a.remove();
-}
-
-const jsonHref = (data) => 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data));
+import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile } from '../lib/chatFile';
+import { downloadText } from '../lib/download';
 
 /** Chat list state, persistence, and import/export. */
 export function useChats() {
@@ -54,57 +44,35 @@ export function useChats() {
 
     const exportChat = (chat = currentChat) => {
         if (!chat) return;
-        download(jsonHref(chat), `strudel-chat-${chat.name}.json`);
+        downloadText(exportFileName([chat]), JSON.stringify(buildExport([chat]), null, 2));
     };
 
     const exportAllChats = () => {
         if (chats.length === 0) return;
-        download(jsonHref(chats), `strudel-chats-backup-${new Date().toISOString().slice(0, 10)}.json`);
+        downloadText(exportFileName(chats), JSON.stringify(buildExport(chats), null, 2));
     };
 
-    /** Accepts a single chat object or an array of chats ("Export All"). Calls `onImported` on success. */
-    const importChatFile = (file, onImported) => {
+    /**
+     * Import a backup file: the current format, or a single chat / array of chats written by
+     * earlier versions. Calls `onImported` on success and tells the user what happened.
+     */
+    const importChatFile = async (file, onImported) => {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const importedData = JSON.parse(e.target.result);
-
-                if (Array.isArray(importedData)) {
-                    const newChats = importedData.filter(chat =>
-                        chat.messages && Array.isArray(chat.messages)
-                    ).map(chat => ({
-                        ...chat,
-                        id: generateId(), // Always generate new IDs to avoid collisions
-                        name: chat.name || `Imported ${new Date().toLocaleTimeString()}`
-                    }));
-
-                    if (newChats.length > 0) {
-                        setChats(prev => [...newChats, ...prev]);
-                        setCurrentChatId(newChats[0].id);
-                        onImported?.();
-                        alert(`Successfully imported ${newChats.length} chats.`);
-                    } else {
-                        alert('No valid chats found in file.');
-                    }
-                } else if (importedData.messages && Array.isArray(importedData.messages)) {
-                    const newChat = {
-                        ...importedData,
-                        id: generateId(),
-                        name: importedData.name || `Imported ${new Date().toLocaleTimeString()}`
-                    };
-                    setChats(prev => [newChat, ...prev]);
-                    setCurrentChatId(newChat.id);
-                    onImported?.();
-                } else {
-                    alert('Invalid chat file format.');
-                }
-            } catch (error) {
-                console.error('Error importing chat:', error);
-                alert('Error importing chat file.');
+        try {
+            if (file.size > MAX_CHAT_FILE_BYTES) {
+                throw new ChatFileError(`This file is too large to import (limit ${MAX_CHAT_FILE_BYTES / 1024 / 1024} MB).`);
             }
-        };
-        reader.readAsText(file);
+            const result = parseChatFile(await file.text());
+            setChats(prev => [...result.chats, ...prev]);
+            setCurrentChatId(result.chats[0].id);
+            onImported?.();
+            if (result.chats.length > 1 || result.skippedChats || result.skippedMessages || result.warnings.length) {
+                alert(describeImport(result));
+            }
+        } catch (error) {
+            if (!(error instanceof ChatFileError)) console.error('Error importing chat:', error);
+            alert(error instanceof ChatFileError ? error.message : 'Error importing chat file.');
+        }
     };
 
     return {
