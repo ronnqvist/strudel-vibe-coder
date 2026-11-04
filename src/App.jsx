@@ -622,6 +622,14 @@ function App() {
                                 >
                                     MIT License
                                 </a>
+                                <a
+                                    href="https://github.com/ronnqvist/strudel-vibe-coder/blob/main/THIRD_PARTY_NOTICES.md"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-500 hover:text-cyber-neon transition-colors"
+                                >
+                                    Third-party notices
+                                </a>
                                 <p className="text-xs text-gray-500">
                                     Music engine:{' '}
                                     <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyber-neon">Strudel (strudel.cc)</a>,

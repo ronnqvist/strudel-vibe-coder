@@ -16,6 +16,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "licenses": "node scripts/check-licenses.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

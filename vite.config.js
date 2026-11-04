@@ -8,5 +8,7 @@ export default defineConfig({
   base: './', // Use relative paths for GitHub Pages
   build: {
     outDir: 'docs', // Output to 'docs' folder for GitHub Pages
+    // Ship the licence texts of bundled npm packages next to the build
+    license: { fileName: 'THIRD_PARTY_LICENSES.md' },
   },
 })
