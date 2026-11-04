@@ -41,3 +41,9 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #00f3ff;
 }
+
+/* Keyboard focus: one clearly visible ring for every control (inputs also change border colour) */
+:focus-visible {
+  outline: 2px solid var(--color-cyber-cyan);
+  outline-offset: 2px;
+}

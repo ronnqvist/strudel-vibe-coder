@@ -18,25 +18,28 @@ const ChatInput = ({ value, onChange, onSend, onStop, disabled, hasMessages }) =
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={handleKeyDown}
+                    aria-label="Message"
                     placeholder={hasMessages ? "Suggest changes or paste in any error messages" : "Describe the sound (e.g. 'acid techno bass')"}
-                    className="flex-1 bg-cyber-dark border border-cyber-gray p-3 rounded-lg focus:border-cyber-neon focus:outline-none text-white placeholder-gray-600"
+                    className="flex-1 bg-cyber-dark border border-cyber-gray p-3 rounded-lg focus:border-cyber-neon text-white placeholder-gray-400"
                     disabled={disabled}
                 />
                 {disabled ? (
                     <button
                         onClick={onStop}
                         className="bg-red-500 text-black p-3 rounded-lg hover:bg-red-400 transition-colors"
+                        aria-label="Stop generating"
                         title="Stop generating (Esc)"
                     >
-                        <Square className="w-5 h-5" />
+                        <Square className="w-5 h-5" aria-hidden="true" />
                     </button>
                 ) : (
                     <button
                         onClick={onSend}
                         className="bg-cyber-neon text-black p-3 rounded-lg hover:bg-pink-400 transition-colors"
+                        aria-label="Send"
                         title="Send"
                     >
-                        <Send className="w-5 h-5" />
+                        <Send className="w-5 h-5" aria-hidden="true" />
                     </button>
                 )}
             </div>

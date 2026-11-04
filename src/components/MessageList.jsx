@@ -14,10 +14,10 @@ const MessageList = ({ messages, isLoading, streamingText, streamingModel, editi
     }, [messages, streamingText]);
 
     return (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={containerRef}>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={containerRef} role="region" aria-label="Conversation" tabIndex={0}>
             {messages.length === 0 && (
-                <div className="text-center text-gray-500 mt-10">
-                    <Terminal className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <div className="text-center text-gray-400 mt-10">
+                    <Terminal className="w-12 h-12 mx-auto mb-2 opacity-50" aria-hidden="true" />
                     <p>Initialize vibe session...</p>
                     <p className="text-sm">Type a music description to start.</p>
                 </div>

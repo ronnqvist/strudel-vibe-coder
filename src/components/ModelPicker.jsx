@@ -6,7 +6,7 @@ import { addBookmark, filterModels, providersOf, unlistedBookmarks } from '../li
 
 const MAX_RESULTS = 40;
 
-const fieldClass = 'w-full bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white focus:border-cyber-neon focus:outline-none';
+const fieldClass = 'w-full bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white focus:border-cyber-neon';
 
 /**
  * Model selection: bookmarks, suggested models, a searchable list of everything OpenRouter offers,
@@ -72,7 +72,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
             )}
 
             <div className="mb-3">
-                <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Suggested (always the newest version)</div>
+                <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider">Suggested (always the newest version)</div>
                 <div className="flex flex-wrap gap-2">
                     {RECOMMENDED_MODELS.map(m => (
                         <button
@@ -90,32 +90,31 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                 </div>
             </div>
 
-            <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Bookmarks</div>
+            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider">Bookmarks</div>
             <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
                 {bookmarks.map(m => (
                     <div
                         key={m.id}
-                        className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${model === m.id
+                        className={`flex items-center justify-between rounded border transition-colors ${model === m.id
                             ? 'bg-cyber-neon/10 border-cyber-neon text-cyber-neon'
                             : 'bg-cyber-black border-cyber-gray text-gray-300 hover:border-cyber-cyan'
                             }`}
-                        onClick={() => choose(m)}
                     >
-                        <span className="min-w-0 flex-1">
+                        <button onClick={() => choose(m)} aria-pressed={model === m.id} className="min-w-0 flex-1 text-left p-2 rounded">
                             <span className="block text-sm truncate">{m.name || m.id}</span>
-                            <span className="block text-[10px] text-gray-500 font-mono truncate">{m.id}</span>
-                        </span>
+                            <span className="block text-[10px] text-gray-400 font-mono truncate">{m.id}</span>
+                        </button>
                         {ready && !listedIds.has(m.id) && (
                             <span className="mx-2 text-[10px] text-yellow-300 border border-yellow-700 px-1 rounded" title="OpenRouter does not list this model any more">
                                 not listed
                             </span>
                         )}
                         <button
-                            onClick={(e) => { e.stopPropagation(); removeBookmark(m.id); }}
+                            onClick={() => removeBookmark(m.id)}
                             aria-label={`Remove bookmark ${m.name || m.id}`}
-                            className="p-1 hover:text-red-500 text-gray-500"
+                            className="p-2 hover:text-red-500 text-gray-400"
                         >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                     </div>
                 ))}
@@ -177,7 +176,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                                     >
                                         <button onClick={() => choose(m)} className="flex-1 min-w-0 text-left hover:text-cyber-neon">
                                             <span className="block truncate">{m.name}</span>
-                                            <span className="block text-[10px] text-gray-500 font-mono truncate">
+                                            <span className="block text-[10px] text-gray-400 font-mono truncate">
                                                 {m.id}{m.isFree ? ' · free' : ''}
                                             </span>
                                         </button>
@@ -185,14 +184,14 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                                             onClick={() => bookmark(m)}
                                             aria-label={`Bookmark ${m.name}`}
                                             title="Add to bookmarks"
-                                            className="p-1 text-gray-500 hover:text-cyber-neon"
+                                            className="p-1 text-gray-400 hover:text-cyber-neon"
                                         >
-                                            <Star className="w-4 h-4" />
+                                            <Star className="w-4 h-4" aria-hidden="true" />
                                         </button>
                                     </li>
                                 ))}
                             </ul>
-                            <p className="mt-1 text-[10px] text-gray-500">
+                            <p className="mt-1 text-[10px] text-gray-400">
                                 {matches.length === 0
                                     ? 'No model matches.'
                                     : `Showing ${Math.min(matches.length, MAX_RESULTS)} of ${matches.length}, newest first.`}
@@ -203,7 +202,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
             </details>
 
             <div className="bg-cyber-black p-3 rounded border border-cyber-gray">
-                <div className="text-xs text-gray-500 mb-2 uppercase tracking-wider flex justify-between items-center">
+                <div className="text-xs text-gray-400 mb-2 uppercase tracking-wider flex justify-between items-center">
                     <span>Model id</span>
                     <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-cyber-neon hover:underline normal-case">
                         Find Models
@@ -232,7 +231,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                         aria-label="Save as bookmark"
                         className="bg-cyber-gray hover:bg-cyber-neon hover:text-black text-cyber-cyan p-2 rounded transition-colors disabled:opacity-50"
                     >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-4 h-4" aria-hidden="true" />
                     </button>
                 </div>
             </div>

@@ -21,6 +21,7 @@ function App() {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [streaming, setStreaming] = useState(null); // { chatId, text } while a reply is arriving
+    const [announcement, setAnnouncement] = useState(''); // read out by screen readers
     const abortRef = useRef(null);
     const [currentCode, setCurrentCode] = useLocalStorage('openrouter_current_code', '');
     const [showSettings, setShowSettings] = useState(false);
@@ -32,7 +33,8 @@ function App() {
     // Esc stops a running generation; leaving the page cancels the request
     useEffect(() => {
         if (!isLoading) return undefined;
-        const onKey = (e) => { if (e.key === 'Escape') abortRef.current?.abort(); };
+        // a dialog that handled this Esc (closing itself) marks it as handled; then keep generating
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) abortRef.current?.abort(); };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [isLoading]);
@@ -64,6 +66,7 @@ function App() {
 
         setInput('');
         setIsLoading(true);
+        setAnnouncement('Generating a reply');
         const controller = new AbortController();
         abortRef.current = controller;
 
@@ -85,7 +88,10 @@ function App() {
             });
 
             // Stopped before anything arrived: keep the user's message, add no empty reply
-            if (result.stopped && !result.content) return;
+            if (result.stopped && !result.content) {
+                setAnnouncement('Generation stopped');
+                return;
+            }
 
             // Name a new chat after its first message
             let name = chat.currentChat.name;
@@ -99,7 +105,9 @@ function App() {
             if (result.code && !result.stopped) {
                 setCurrentCode(result.code);
             }
+            setAnnouncement(result.stopped ? 'Generation stopped' : result.code ? 'Reply received. The pattern was loaded into the player.' : 'Reply received');
         } catch (error) {
+            setAnnouncement(`Error: ${error.message}`);
             const kept = error.partial ? [reply({ content: error.partial, code: null, stopped: true, modelLabel: settings.modelName })] : [];
             chat.updateChat(chatId, { messages: [...updatedMessages, ...kept, { role: 'assistant', content: `Error: ${error.message}` }] });
         } finally {
@@ -118,8 +126,10 @@ function App() {
                 onToggleSettings={() => setShowSettings(!showSettings)}
             />
 
+            <div role="status" aria-live="polite" className="sr-only">{announcement}</div>
+
             {/* Main Content - Split View */}
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+            <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
                 {showChats && (
                     <ChatSidebar
                         chats={chat.chats}
@@ -183,7 +193,7 @@ function App() {
                 </div>
 
                 <PlayerPanel code={currentCode} />
-            </div>
+            </main>
         </div>
     );
 }
