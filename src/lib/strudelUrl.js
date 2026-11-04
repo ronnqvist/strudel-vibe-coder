@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Build strudel.cc URLs that open the REPL with a given piece of code.
  *

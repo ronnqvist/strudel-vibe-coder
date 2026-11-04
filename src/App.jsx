@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import React, { useState, useEffect, useRef } from 'react';
 import StrudelFrame from './components/StrudelFrame';
 import { generateStrudelCode } from './lib/openrouter';

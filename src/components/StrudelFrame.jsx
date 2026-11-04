@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import React, { useState } from 'react';
 import { MAX_URL_LENGTH, normalizeTypography, shortHash, strudelUrl } from '../lib/strudelUrl';
 

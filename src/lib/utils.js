@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 export function extractCode(content) {
     if (!content) return '';
 

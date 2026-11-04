@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Based on the create-vite React template (MIT, https://github.com/vitejs/vite/tree/main/packages/create-vite).
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
