@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocalStorage } from './useLocalStorage';
+import { loadApiKey, persistApiKey, persistRemember, readRemember } from '../lib/keyStorage';
+import { urlKey } from '../lib/urlKey';
 
 const DEFAULT_MODEL = 'anthropic/claude-opus-4.5';
 const DEFAULT_SAVED_MODELS = [
@@ -9,21 +11,42 @@ const DEFAULT_SAVED_MODELS = [
     { id: 'openai/gpt-5.1', name: 'GPT 5.1' },
 ];
 
-/** API key (stored, or temporary from the URL hash), active model and model bookmarks. */
+/**
+ * API key, active model and model bookmarks.
+ *
+ * The key comes from storage (while "remember" is on) and can be replaced for this visit by a
+ * temporary key from the address (`#sk-or-v1-…`), which is held in memory only.
+ */
 export function useSettings() {
-    const [apiKey, setApiKey] = useLocalStorage('openrouter_api_key', '');
-    const [hashApiKey] = useState(() => {
-        const hash = window.location.hash;
-        return hash && hash.startsWith('#sk-or-v1-') ? hash.slice(1) : '';
-    });
+    const [remember, setRememberState] = useState(() => readRemember(localStorage));
+    const [apiKey, setApiKey] = useState(() => loadApiKey(localStorage));
+    const [hashApiKey, setHashApiKey] = useState(urlKey);
     const [model, setModel] = useLocalStorage('openrouter_model', DEFAULT_MODEL);
     const [savedModels, setSavedModels] = useLocalStorage('openrouter_saved_models', DEFAULT_SAVED_MODELS, { json: true });
+
+    useEffect(() => {
+        persistApiKey(localStorage, apiKey, remember);
+    }, [apiKey, remember]);
+
+    const setRemember = (value) => {
+        persistRemember(localStorage, value);
+        setRememberState(value);
+    };
+
+    /** Remove the key everywhere: storage, memory, and any temporary key from the address. */
+    const forgetKey = () => {
+        setApiKey('');
+        setHashApiKey('');
+    };
 
     return {
         apiKey,
         setApiKey,
         hashApiKey,
         effectiveApiKey: hashApiKey || apiKey,
+        remember,
+        setRemember,
+        forgetKey,
         model,
         setModel,
         savedModels,

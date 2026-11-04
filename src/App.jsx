@@ -141,6 +141,9 @@ function App() {
                         apiKey={settings.apiKey}
                         onApiKeyChange={settings.setApiKey}
                         hasHashKey={Boolean(settings.hashApiKey)}
+                        remember={settings.remember}
+                        onRememberChange={settings.setRemember}
+                        onForgetKey={settings.forgetKey}
                         model={settings.model}
                         onModelChange={settings.setModel}
                         savedModels={settings.savedModels}

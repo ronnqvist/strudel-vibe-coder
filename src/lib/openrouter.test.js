@@ -27,7 +27,13 @@ function mockStream(parts, opts) {
 const convo = [{ role: 'user', content: 'acid techno bass' }];
 
 beforeEach(() => {
-    vi.stubGlobal('window', { location: { href: 'https://example.test/app/' } });
+    vi.stubGlobal('window', {
+        location: {
+            origin: 'https://example.test',
+            pathname: '/app/',
+            href: 'https://example.test/app/?x=1#sk-or-v1-secretsecret',
+        },
+    });
 });
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -57,6 +63,14 @@ describe('generateStrudelCode: request', () => {
         const fetchMock = mockStream([]);
         await expect(generateStrudelCode('  ', 'm', convo)).rejects.toThrow('API Key is required');
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('identifies the app by origin and path only: never the URL hash or query', async () => {
+        const fetchMock = mockStream([delta('x'), 'data: [DONE]\n\n']);
+        await generateStrudelCode('k', 'm', convo, 'M');
+        const referer = fetchMock.mock.calls[0][1].headers['HTTP-Referer'];
+        expect(referer).toBe('https://example.test/app/');
+        expect(referer).not.toContain('sk-or-v1');
     });
 
     it('passes the abort signal to fetch', async () => {

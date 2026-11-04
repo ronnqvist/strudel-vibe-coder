@@ -5,6 +5,7 @@
 import { OPENROUTER_API_URL } from '../config';
 import { extractCode, withAttribution } from './extractCode';
 import { readSSE } from './sse';
+import { appReferer } from './urlKey';
 
 
 export const defaultModels = [
@@ -384,7 +385,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${cleanApiKey}`,
-                "HTTP-Referer": window.location.href, // Required by OpenRouter
+                "HTTP-Referer": appReferer(), // Identifies the app to OpenRouter; never includes the URL hash
                 "X-Title": "Strudel Vibe Coder", // Optional
                 "Content-Type": "application/json"
             },

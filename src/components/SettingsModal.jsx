@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Info } from 'lucide-react';
 
-const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, model, onModelChange, savedModels, onSavedModelsChange, onClose }) => {
+const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRememberChange, onForgetKey, model, onModelChange, savedModels, onSavedModelsChange, onClose }) => {
     const [newModelName, setNewModelName] = useState('');
 
     const removeBookmark = (id) => {
@@ -34,7 +34,7 @@ const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, model, onModelChang
                 {hasHashKey && (
                     <div className="bg-blue-900/30 border border-blue-500/50 p-3 rounded mb-4 text-sm text-blue-200 flex items-center gap-2">
                         <Info className="w-4 h-4" />
-                        You are using a temporary API key provided via the URL.
+                        You are using a temporary API key provided via the URL. It is kept in memory only and has been removed from the address bar.
                     </div>
                 )}
 
@@ -52,6 +52,27 @@ const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, model, onModelChang
                         className="w-full bg-cyber-black border border-cyber-gray p-2 rounded focus:border-cyber-cyan focus:outline-none text-white"
                         placeholder="sk-or-..."
                     />
+                    <label className="flex items-center gap-2 mt-2 text-xs text-gray-400 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={remember}
+                            onChange={(e) => onRememberChange(e.target.checked)}
+                            className="accent-cyber-neon"
+                        />
+                        Remember key on this device
+                    </label>
+                    <p className="mt-1 text-xs text-gray-500">
+                        {remember
+                            ? 'The key is stored in this browser (localStorage) and sent only to openrouter.ai.'
+                            : 'The key is kept in memory for this tab only and is gone after a reload.'}
+                    </p>
+                    <button
+                        onClick={onForgetKey}
+                        disabled={!apiKey && !hasHashKey}
+                        className="mt-2 text-xs text-red-400 hover:text-red-300 underline disabled:opacity-40 disabled:no-underline"
+                    >
+                        Forget key
+                    </button>
                 </div>
 
                 <div className="mb-4">
