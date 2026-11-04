@@ -31,7 +31,7 @@ npm run dev        # local dev server
 npm test           # unit tests (Vitest)
 npm run test:e2e   # end-to-end tests (Playwright) against the production build
 npm run lint
-npm run build      # production build into docs/
+npm run build      # production build into dist/
 npm run licenses   # licences of every package that ends up in the bundle
 ```
 
@@ -43,7 +43,7 @@ The production build includes a strict Content-Security-Policy (`scripts/csp.js`
 
 ### Deployment
 
-`.github/workflows/pages.yml` runs the checks on every change and can publish to GitHub Pages from `main` (Settings > Pages > Source: GitHub Actions). Until that setting is switched, the site is served from the committed `docs/` folder, which is the output of `npm run build`.
+`.github/workflows/pages.yml` runs the checks on every change and publishes `main` to GitHub Pages (repository setting: Settings > Pages > Source = GitHub Actions). Build output is not committed.
 
 ## License
 

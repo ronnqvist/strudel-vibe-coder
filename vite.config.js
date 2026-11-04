@@ -19,9 +19,9 @@ const cspMeta = () => ({
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), cspMeta()],
-  base: './', // Use relative paths for GitHub Pages
+  base: './', // relative paths: the build works under any sub-path (CI builds with --base=/strudel-vibe-coder/)
   build: {
-    outDir: 'docs', // Output to 'docs' folder for GitHub Pages
+    outDir: 'dist', // the GitHub Actions workflow publishes this to GitHub Pages
     // Ship the licence texts of bundled npm packages next to the build
     license: { fileName: 'THIRD_PARTY_LICENSES.md' },
   },
