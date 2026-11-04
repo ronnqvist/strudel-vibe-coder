@@ -347,7 +347,14 @@ For code generation, prioritize working code over explanation.
 ALWAYS double-check syntax before responding - one-shot correctness is critical.
 `;
 
-export async function generateStrudelCode(apiKey, model, chatHistory, userMessage, modelName) {
+/**
+ * @param {string} apiKey
+ * @param {string} model
+ * @param {{ role: string, content: string }[]} conversation the whole conversation so far,
+ *   including the user's newest message as its last entry (it is not appended again here)
+ * @param {string} [modelName] display name used in the attribution line
+ */
+export async function generateStrudelCode(apiKey, model, conversation, modelName) {
     const cleanApiKey = apiKey?.trim();
     if (!cleanApiKey) {
         throw new Error("API Key is required");
@@ -355,8 +362,7 @@ export async function generateStrudelCode(apiKey, model, chatHistory, userMessag
 
     const messages = [
         { role: "system", content: SYSTEM_PROMPT },
-        ...chatHistory,
-        { role: "user", content: userMessage }
+        ...conversation
     ];
 
     try {

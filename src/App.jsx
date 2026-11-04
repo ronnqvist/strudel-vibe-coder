@@ -4,35 +4,7 @@ import StrudelFrame from './components/StrudelFrame';
 import { generateStrudelCode } from './lib/openrouter';
 import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save, Info } from 'lucide-react';
 import { extractCode, generateId, formatDate } from './lib/utils';
-
-function createChat() {
-    return {
-        id: generateId(),
-        name: `New Chat`,
-        messages: [],
-        createdAt: new Date().toISOString()
-    };
-}
-
-// Read chats from localStorage once, at startup. Guarantees at least one chat
-// and a valid current chat id (an old build could store the string "null").
-function loadInitialChats() {
-    let chats = [];
-    try {
-        const saved = localStorage.getItem('openrouter_chats');
-        if (saved) chats = JSON.parse(saved);
-    } catch {
-        chats = [];
-    }
-    if (!Array.isArray(chats)) chats = [];
-    let currentId = localStorage.getItem('openrouter_current_chat_id');
-    if (chats.length === 0) {
-        const chat = createChat();
-        return { chats: [chat], currentId: chat.id };
-    }
-    if (!chats.some(c => c.id === currentId)) currentId = chats[0].id;
-    return { chats, currentId };
-}
+import { createChat, loadInitialChats, removeChat, resetChats } from './lib/chats';
 
 function App() {
     const [apiKey, setApiKey] = useState(localStorage.getItem('openrouter_api_key') || '');
@@ -121,22 +93,16 @@ function App() {
 
     const deleteChat = (id, e) => {
         e.stopPropagation();
-        const newChats = chats.filter(c => c.id !== id);
-        setChats(newChats);
-        if (currentChatId === id) {
-            setCurrentChatId(newChats.length > 0 ? newChats[0].id : null);
-        }
-        if (newChats.length === 0) {
-            // If we deleted the last chat, create a new one immediately or handle empty state
-            // For simplicity, let's allow empty state but the effect above will likely create one
-        }
+        const next = removeChat(chats, currentChatId, id);
+        setChats(next.chats);
+        setCurrentChatId(next.currentId);
     };
 
     const deleteAllChats = () => {
         if (window.confirm("Are you sure you want to delete all chats?")) {
-            setChats([]);
-            setCurrentChatId(null);
-            // Effect will trigger creation of new chat
+            const next = resetChats();
+            setChats(next.chats);
+            setCurrentChatId(next.currentId);
         }
     };
 
@@ -242,10 +208,6 @@ function App() {
             return;
         }
 
-        if (!currentChatId) {
-            createNewChat();
-        }
-
         const userMsg = { role: 'user', content: input };
         // Optimistic update
         const updatedMessages = [...chatHistory, userMsg];
@@ -263,7 +225,7 @@ function App() {
 
             // Attach model name to the response message
             const modelName = savedModels.find(m => m.id === model)?.name || model;
-            const response = await generateStrudelCode(effectiveApiKey, model, apiChatHistory, input, modelName);
+            const response = await generateStrudelCode(effectiveApiKey, model, apiChatHistory, modelName);
 
             const responseWithModel = { ...response, model: modelName };
 
