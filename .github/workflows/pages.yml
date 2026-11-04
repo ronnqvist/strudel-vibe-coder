@@ -3,7 +3,6 @@
 # Checks every change, and publishes the site to GitHub Pages from main.
 #
 # Publishing needs the repository setting  Settings > Pages > Build and deployment > Source = "GitHub Actions".
-# Until that is switched, the "Deploy" job fails after a push to main; the checks are unaffected.
 #
 # Actions are pinned to full commit IDs (the version is in the comment). Update them deliberately.
 name: CI and Pages
