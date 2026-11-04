@@ -1,8 +1,15 @@
 {
   "name": "strudel-vibe-coder",
   "private": true,
-  "version": "0.0.0",
-  "license": "AGPL-3.0-only",
+  "version": "1.0.0",
+  "description": "Describe music in plain language and get live-coded Strudel patterns, played in strudel.cc.",
+  "license": "MIT",
+  "author": "Simon Rönnqvist <simon@iki.fi>",
+  "homepage": "https://ronnqvist.github.io/strudel-vibe-coder/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ronnqvist/strudel-vibe-coder.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

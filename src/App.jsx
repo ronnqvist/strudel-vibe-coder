@@ -611,16 +611,22 @@ function App() {
                                     rel="noopener noreferrer"
                                     className="text-xs text-gray-500 hover:text-cyber-neon transition-colors"
                                 >
-                                    View Source Code (GitHub)
+                                    Source code (GitHub)
                                 </a>
                                 <a
-                                    href="/LICENSE"
+                                    href="https://github.com/ronnqvist/strudel-vibe-coder/blob/main/LICENSE"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-xs text-gray-500 hover:text-cyber-neon transition-colors"
                                 >
-                                    License (AGPL v3)
+                                    MIT License
                                 </a>
+                                <p className="text-xs text-gray-500">
+                                    Music engine:{' '}
+                                    <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyber-neon">Strudel (strudel.cc)</a>,
+                                    {' '}AGPL-3.0, by the Strudel/TidalCycles community
+                                    {' '}(<a href="https://codeberg.org/uzu/strudel" target="_blank" rel="noopener noreferrer" className="underline hover:text-cyber-neon">source</a>)
+                                </p>
                             </div>
                         </div>
                     </div>
