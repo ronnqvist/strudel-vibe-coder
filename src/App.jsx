@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StrudelPlayer from './components/StrudelPlayer';
-import { generateStrudelCode, defaultModels } from './lib/openrouter';
+import { generateStrudelCode } from './lib/openrouter';
 import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save, Info } from 'lucide-react';
 import { extractCode, generateId, formatDate } from './lib/utils';
 

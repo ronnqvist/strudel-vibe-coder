@@ -7,6 +7,7 @@ const sanitizeCode = (code) => {
         .replace(/[\u2018\u2019]/g, "'") // Smart single quotes
         .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
         .replace(/[\u2013\u2014]/g, '-') // En-dash and Em-dash
+        // eslint-disable-next-line no-control-regex
         .replace(/[^\x00-\xFF]/g, '');   // Remove any other non-Latin1 characters
 };
 
