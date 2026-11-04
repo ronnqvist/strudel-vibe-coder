@@ -4,14 +4,14 @@ import { Terminal } from 'lucide-react';
 import MessageItem from './MessageItem';
 
 /** Scrolling message column: empty state, messages, and the "generating" indicator. */
-const MessageList = ({ messages, isLoading, editing, onEditContentChange, onStartEdit, onCancelEdit, onSaveEdit, onLoadCode }) => {
+const MessageList = ({ messages, isLoading, streamingText, streamingModel, editing, onEditContentChange, onStartEdit, onCancelEdit, onSaveEdit, onLoadCode }) => {
     const containerRef = useRef(null);
 
     useEffect(() => {
         if (containerRef.current) {
             containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
-    }, [messages]);
+    }, [messages, streamingText]);
 
     return (
         <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={containerRef}>
@@ -35,7 +35,10 @@ const MessageList = ({ messages, isLoading, editing, onEditContentChange, onStar
                     onLoadCode={() => onLoadCode(msg)}
                 />
             ))}
-            {isLoading && (
+            {isLoading && streamingText && (
+                <MessageItem message={{ role: 'assistant', content: streamingText, model: streamingModel }} readOnly />
+            )}
+            {isLoading && !streamingText && (
                 <div className="flex justify-start">
                     <div className="bg-cyber-black p-3 rounded-lg border border-cyber-neon/30 animate-pulse text-cyber-neon">
                         Generating vibe...

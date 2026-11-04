@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Header from './components/Header';
 import ChatSidebar from './components/ChatSidebar';
 import SettingsModal from './components/SettingsModal';
@@ -18,10 +18,23 @@ function App() {
 
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [streaming, setStreaming] = useState(null); // { chatId, text } while a reply is arriving
+    const abortRef = useRef(null);
     const [currentCode, setCurrentCode] = useLocalStorage('openrouter_current_code', '');
     const [showSettings, setShowSettings] = useState(false);
     const [showChats, setShowChats] = useState(false);
     const [editingMessage, setEditingMessage] = useState({ index: null, content: '' });
+
+    const stopGenerating = () => abortRef.current?.abort();
+
+    // Esc stops a running generation; leaving the page cancels the request
+    useEffect(() => {
+        if (!isLoading) return undefined;
+        const onKey = (e) => { if (e.key === 'Escape') abortRef.current?.abort(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isLoading]);
+    useEffect(() => () => abortRef.current?.abort(), []);
 
     const stopEditing = () => setEditingMessage({ index: null, content: '' });
 
@@ -49,13 +62,28 @@ function App() {
 
         setInput('');
         setIsLoading(true);
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        const reply = (result) => ({
+            role: 'assistant',
+            content: result.content,
+            code: result.code,
+            model: settings.modelName,
+            ...(result.stopped && { stopped: true }),
+        });
 
         try {
             // Only role and content go to the API
             const apiMessages = updatedMessages.map(msg => ({ role: msg.role, content: msg.content }));
 
-            const response = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName);
-            const responseWithModel = { ...response, model: settings.modelName };
+            const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
+                signal: controller.signal,
+                onText: (text) => setStreaming({ chatId, text }),
+            });
+
+            // Stopped before anything arrived: keep the user's message, add no empty reply
+            if (result.stopped && !result.content) return;
 
             // Name a new chat after its first message
             let name = chat.currentChat.name;
@@ -63,15 +91,18 @@ function App() {
                 name = input.slice(0, 30) + (input.length > 30 ? '...' : '');
             }
 
-            chat.updateChat(chatId, { messages: [...updatedMessages, responseWithModel], name });
+            chat.updateChat(chatId, { messages: [...updatedMessages, reply(result)], name });
 
-            // Only update the player if code was extracted
-            if (response.code) {
-                setCurrentCode(response.code);
+            // Load the pattern into the player only when the reply is complete
+            if (result.code && !result.stopped) {
+                setCurrentCode(result.code);
             }
         } catch (error) {
-            chat.updateChat(chatId, { messages: [...updatedMessages, { role: 'assistant', content: `Error: ${error.message}` }] });
+            const kept = error.partial ? [reply({ content: error.partial, code: null, stopped: true })] : [];
+            chat.updateChat(chatId, { messages: [...updatedMessages, ...kept, { role: 'assistant', content: `Error: ${error.message}` }] });
         } finally {
+            abortRef.current = null;
+            setStreaming(null);
             setIsLoading(false);
         }
     };
@@ -123,6 +154,8 @@ function App() {
                     <MessageList
                         messages={chat.messages}
                         isLoading={isLoading}
+                        streamingText={streaming?.chatId === chat.currentChatId ? streaming.text : null}
+                        streamingModel={settings.modelName}
                         editing={editingMessage}
                         onEditContentChange={(content) => setEditingMessage({ ...editingMessage, content })}
                         onStartEdit={(index, content) => setEditingMessage({ index, content })}
@@ -137,6 +170,7 @@ function App() {
                         value={input}
                         onChange={setInput}
                         onSend={handleSend}
+                        onStop={stopGenerating}
                         disabled={isLoading}
                         hasMessages={chat.messages.length > 0}
                     />

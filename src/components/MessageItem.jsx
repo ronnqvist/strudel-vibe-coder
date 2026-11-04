@@ -11,6 +11,7 @@ const MessageItem = ({
     onCancelEdit,
     onSaveEdit,
     onLoadCode,
+    readOnly = false,
 }) => (
     <div className={`flex ${isEditing ? 'w-full' : (message.role === 'user' ? 'justify-end' : 'justify-start')}`}>
         <div className={`${isEditing ? 'w-full' : 'max-w-[80%]'} p-3 rounded-lg ${message.role === 'user'
@@ -38,8 +39,9 @@ const MessageItem = ({
                                     <Terminal className="w-3 h-3" />
                                     <span className="font-bold">Generated Code</span>
                                     {message.model && <span className="text-[10px] text-gray-500 ml-2 border border-gray-700 px-1 rounded">{message.model}</span>}
+                                    {message.stopped && <span className="text-[10px] text-red-400 border border-red-900 px-1 rounded">stopped</span>}
                                 </div>
-                                <div className="flex gap-1">
+                                {!readOnly && <div className="flex gap-1">
                                     <button
                                         onClick={onStartEdit}
                                         className="p-1 hover:text-cyber-neon text-gray-500 transition-colors"
@@ -55,7 +57,7 @@ const MessageItem = ({
                                         <Import className="w-3 h-3" />
                                         Import
                                     </button>
-                                </div>
+                                </div>}
                             </div>
                             <pre className="whitespace-pre-wrap break-words text-sm">{message.content}</pre>
                         </div>

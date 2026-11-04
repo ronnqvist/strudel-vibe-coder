@@ -4,6 +4,7 @@
  */
 import { OPENROUTER_API_URL } from '../config';
 import { extractCode, withAttribution } from './extractCode';
+import { readSSE } from './sse';
 
 
 export const defaultModels = [
@@ -349,13 +350,21 @@ ALWAYS double-check syntax before responding - one-shot correctness is critical.
 `;
 
 /**
+ * Ask the model for Strudel code and stream the reply.
+ *
  * @param {string} apiKey
- * @param {string} model
+ * @param {string} model OpenRouter model id
  * @param {{ role: string, content: string }[]} conversation the whole conversation so far,
  *   including the user's newest message as its last entry (it is not appended again here)
  * @param {string} [modelName] display name used in the attribution line
+ * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void }} [options]
+ *   `signal` stops the request; the text received so far is then returned with `stopped: true`.
+ *   `onText` is called with the full reply text every time it grows.
+ * @returns {Promise<{ role: 'assistant', content: string, code: string | null, stopped: boolean, resolvedModel: string | null }>}
+ *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases).
+ *   If the stream fails midway the thrown error carries the text received so far in `error.partial`.
  */
-export async function generateStrudelCode(apiKey, model, conversation, modelName) {
+export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText } = {}) {
     const cleanApiKey = apiKey?.trim();
     if (!cleanApiKey) {
         throw new Error("API Key is required");
@@ -365,6 +374,10 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
         { role: "system", content: SYSTEM_PROMPT },
         ...conversation
     ];
+
+    let content = "";
+    let resolvedModel = null;
+    let stopped = false;
 
     try {
         const response = await fetch(OPENROUTER_API_URL, {
@@ -378,7 +391,9 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
             body: JSON.stringify({
                 model: model,
                 messages: messages,
-            })
+                stream: true,
+            }),
+            signal,
         });
 
         if (!response.ok) {
@@ -387,22 +402,49 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
             throw new Error(errorData.error?.message || `OpenRouter API Error: ${response.status} ${response.statusText}`);
         }
 
-        const data = await response.json();
-
-        if (!data.choices || data.choices.length === 0) {
-            throw new Error("No response from model");
+        const contentType = response.headers?.get?.("content-type") || "";
+        if (contentType.includes("application/json") || !response.body) {
+            // The provider ignored `stream: true` and sent the whole reply at once.
+            const data = await response.json();
+            if (!data.choices || data.choices.length === 0) {
+                throw new Error("No response from model");
+            }
+            content = data.choices[0].message.content;
+            resolvedModel = data.model || null;
+            onText?.(content);
+        } else {
+            for await (const payload of readSSE(response.body)) {
+                if (payload === "[DONE]") break;
+                let chunk;
+                try {
+                    chunk = JSON.parse(payload);
+                } catch {
+                    continue; // ignore a malformed event rather than lose the whole reply
+                }
+                if (chunk.error) {
+                    throw new Error(chunk.error.message || "The model reported an error");
+                }
+                resolvedModel = chunk.model || resolvedModel;
+                const delta = chunk.choices?.[0]?.delta?.content;
+                if (delta) {
+                    content += delta;
+                    onText?.(content);
+                }
+            }
+            if (!content) {
+                throw new Error("No response from model");
+            }
         }
-
-        const content = data.choices[0].message.content;
-        const code = withAttribution(extractCode(content), modelName || model) || null;
-
-        return {
-            content: content,
-            code,
-            role: "assistant"
-        };
     } catch (error) {
-        console.error("OpenRouter API Error:", error);
-        throw error;
+        if (error?.name === "AbortError" || signal?.aborted) {
+            stopped = true;
+        } else {
+            console.error("OpenRouter API Error:", error);
+            error.partial = content;
+            throw error;
+        }
     }
+
+    const code = withAttribution(extractCode(content), modelName || model) || null;
+    return { role: "assistant", content, code, stopped, resolvedModel };
 }
