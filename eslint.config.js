@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Based on the create-vite React template (MIT, https://github.com/vitejs/vite/tree/main/packages/create-vite).
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
@@ -5,7 +7,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'docs']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -25,5 +27,10 @@ export default defineConfig([
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
+  },
+  {
+    // Tests and tool configuration run in Node, not in the browser
+    files: ['e2e/**/*.js', 'playwright.config.js', 'scripts/**/*.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
 ])
