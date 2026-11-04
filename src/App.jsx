@@ -9,6 +9,7 @@ import PlayerPanel from './components/PlayerPanel';
 import MobileTabs from './components/MobileTabs';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
+import { patternSyntaxError } from './lib/patternCheck';
 import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
 import { useModelCatalog } from './hooks/useModelCatalog';
@@ -28,6 +29,7 @@ function App() {
     const abortRef = useRef(null);
     const [currentCode, setCurrentCode] = useLocalStorage('openrouter_current_code', '');
     const [seenCode, setSeenCode] = useState(currentCode); // the pattern last shown on the Stage tab
+    const [playerNotice, setPlayerNotice] = useState(''); // why the last pattern was not loaded
     const [showSettings, setShowSettings] = useState(false);
     const [showChats, setShowChats] = useState(false);
     const [editingMessage, setEditingMessage] = useState({ index: null, content: '' });
@@ -54,6 +56,21 @@ function App() {
     const pickPrompt = (text) => {
         setInput(text);
         inputRef.current?.focus();
+    };
+
+    /**
+     * Load a pattern into the player unless it is not valid JavaScript, so a broken reply cannot
+     * replace a pattern that works. Returns whether it was loaded.
+     */
+    const loadIntoPlayer = async (code) => {
+        const error = await patternSyntaxError(code);
+        if (error) {
+            setPlayerNotice(`Not loaded into the player: the code has a syntax error (${error}). The previous pattern is still loaded.`);
+            return false;
+        }
+        setPlayerNotice('');
+        setCurrentCode(code);
+        return true;
     };
 
     const stopEditing = () => setEditingMessage({ index: null, content: '' });
@@ -117,11 +134,13 @@ function App() {
 
             chat.updateChat(chatId, { messages: [...updatedMessages, reply(result)], name });
 
-            // Load the pattern into the player only when the reply is complete
-            if (result.code && !result.stopped) {
-                setCurrentCode(result.code);
-            }
-            setAnnouncement(result.stopped ? 'Generation stopped' : result.code ? 'Reply received. The pattern was loaded into the player.' : 'Reply received');
+            // Load the pattern into the player only when the reply is complete and the code parses
+            const loaded = result.code && !result.stopped ? await loadIntoPlayer(result.code) : false;
+            setAnnouncement(result.stopped
+                ? 'Generation stopped'
+                : !result.code ? 'Reply received'
+                    : loaded ? 'Reply received. The pattern was loaded into the player.'
+                        : 'Reply received. The pattern has a syntax error and was not loaded.');
         } catch (error) {
             setAnnouncement(`Error: ${error.message}`);
             const kept = error.partial ? [reply({ content: error.partial, code: null, stopped: true, modelLabel: settings.modelName })] : [];
@@ -196,9 +215,9 @@ function App() {
                         onStartEdit={(index, content) => setEditingMessage({ index, content })}
                         onCancelEdit={stopEditing}
                         onSaveEdit={saveMessageEdit}
-                        onLoadCode={(msg) => {
+                        onLoadCode={async (msg) => {
                             const code = codeFromMessage(msg);
-                            if (code) setCurrentCode(code);
+                            if (code && !(await loadIntoPlayer(code))) setAnnouncement('The pattern has a syntax error and was not loaded.');
                         }}
                     />
                     <ChatInput
@@ -212,7 +231,7 @@ function App() {
                     />
                 </div>
 
-                <PlayerPanel code={currentCode} visibleOnMobile={tab === 'stage'} />
+                <PlayerPanel code={currentCode} visibleOnMobile={tab === 'stage'} notice={playerNotice} onDismissNotice={() => setPlayerNotice('')} />
             </main>
         </div>
     );
