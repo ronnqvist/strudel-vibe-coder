@@ -10,11 +10,13 @@ import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
 import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
+import { useModelCatalog } from './hooks/useModelCatalog';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 function App() {
     const settings = useSettings();
     const chat = useChats();
+    const catalog = useModelCatalog();
 
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -69,7 +71,7 @@ function App() {
             role: 'assistant',
             content: result.content,
             code: result.code,
-            model: settings.modelName,
+            model: result.modelLabel ?? settings.modelName,
             ...(result.stopped && { stopped: true }),
         });
 
@@ -98,7 +100,7 @@ function App() {
                 setCurrentCode(result.code);
             }
         } catch (error) {
-            const kept = error.partial ? [reply({ content: error.partial, code: null, stopped: true })] : [];
+            const kept = error.partial ? [reply({ content: error.partial, code: null, stopped: true, modelLabel: settings.modelName })] : [];
             chat.updateChat(chatId, { messages: [...updatedMessages, ...kept, { role: 'assistant', content: `Error: ${error.message}` }] });
         } finally {
             abortRef.current = null;
@@ -148,6 +150,7 @@ function App() {
                         onModelChange={settings.setModel}
                         savedModels={settings.savedModels}
                         onSavedModelsChange={settings.setSavedModels}
+                        catalog={catalog}
                         onClose={() => setShowSettings(false)}
                     />
                 )}

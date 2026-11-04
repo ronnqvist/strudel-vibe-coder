@@ -361,8 +361,9 @@ ALWAYS double-check syntax before responding - one-shot correctness is critical.
  * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void }} [options]
  *   `signal` stops the request; the text received so far is then returned with `stopped: true`.
  *   `onText` is called with the full reply text every time it grows.
- * @returns {Promise<{ role: 'assistant', content: string, code: string | null, stopped: boolean, resolvedModel: string | null }>}
- *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases).
+ * @returns {Promise<{ role: 'assistant', content: string, code: string | null, stopped: boolean, resolvedModel: string | null, modelLabel: string }>}
+ *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases);
+ *   `modelLabel` is what to show for it: the concrete model for an alias, the display name otherwise.
  *   If the stream fails midway the thrown error carries the text received so far in `error.partial`.
  */
 export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText } = {}) {
@@ -446,6 +447,8 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
         }
     }
 
-    const code = withAttribution(extractCode(content), modelName || model) || null;
-    return { role: "assistant", content, code, stopped, resolvedModel };
+    // For a `~...-latest` alias, name the model that really answered
+    const modelLabel = resolvedModel && resolvedModel !== model ? resolvedModel : (modelName || model);
+    const code = withAttribution(extractCode(content), modelLabel) || null;
+    return { role: "assistant", content, code, stopped, resolvedModel, modelLabel };
 }

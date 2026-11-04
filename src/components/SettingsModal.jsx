@@ -1,34 +1,12 @@
 // SPDX-License-Identifier: MIT
-import React, { useState } from 'react';
-import { Plus, Trash2, Info } from 'lucide-react';
+import React from 'react';
+import { Info } from 'lucide-react';
+import ModelPicker from './ModelPicker';
 
-const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRememberChange, onForgetKey, model, onModelChange, savedModels, onSavedModelsChange, onClose }) => {
-    const [newModelName, setNewModelName] = useState('');
-
-    const removeBookmark = (id) => {
-        const remaining = savedModels.filter(sm => sm.id !== id);
-        onSavedModelsChange(remaining);
-        if (model === id && savedModels.length > 1) {
-            onModelChange(remaining[0]?.id || '');
-        }
-    };
-
-    const saveBookmark = () => {
-        if (model && newModelName) {
-            // Update if exists, otherwise add
-            const existing = savedModels.find(m => m.id === model);
-            onSavedModelsChange(
-                existing
-                    ? savedModels.map(m => (m.id === model ? { ...m, name: newModelName } : m))
-                    : [...savedModels, { id: model, name: newModelName }]
-            );
-            setNewModelName('');
-        }
-    };
-
+const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRememberChange, onForgetKey, model, onModelChange, savedModels, onSavedModelsChange, catalog, onClose }) => {
     return (
         <div className="absolute top-0 left-0 w-full h-full bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-cyber-dark border border-cyber-neon p-6 rounded-lg w-full max-w-md shadow-[0_0_20px_rgba(255,0,255,0.3)]">
+            <div className="bg-cyber-dark border border-cyber-neon p-6 rounded-lg w-full max-w-lg max-h-full overflow-y-auto shadow-[0_0_20px_rgba(255,0,255,0.3)]">
                 <h2 className="text-xl font-bold mb-4 text-cyber-neon">Configuration</h2>
 
                 {hasHashKey && (
@@ -75,70 +53,13 @@ const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRemembe
                     </button>
                 </div>
 
-                <div className="mb-4">
-                    <label className="block text-sm text-gray-400 mb-2">Model Bookmarks</label>
-
-                    {/* Model List */}
-                    <div className="space-y-2 mb-4 max-h-40 overflow-y-auto">
-                        {savedModels.map(m => (
-                            <div
-                                key={m.id}
-                                className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${model === m.id
-                                    ? 'bg-cyber-neon/10 border-cyber-neon text-cyber-neon'
-                                    : 'bg-cyber-black border-cyber-gray text-gray-300 hover:border-cyber-cyan'
-                                    }`}
-                                onClick={() => {
-                                    onModelChange(m.id);
-                                    setNewModelName(m.name);
-                                }}
-                            >
-                                <span className="text-sm truncate flex-1">{m.name || m.id}</span>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeBookmark(m.id);
-                                    }}
-                                    className="p-1 hover:text-red-500 text-gray-500"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Add New Model */}
-                    <div className="bg-cyber-black p-3 rounded border border-cyber-gray">
-                        <div className="text-xs text-gray-500 mb-2 uppercase tracking-wider flex justify-between items-center">
-                            <span>Model</span>
-                            <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-cyber-neon hover:underline normal-case">
-                                Find Models
-                            </a>
-                        </div>
-                        <input
-                            type="text"
-                            value={model}
-                            onChange={(e) => onModelChange(e.target.value)}
-                            className="w-full bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white mb-2 focus:border-cyber-neon focus:outline-none"
-                            placeholder="Model ID (e.g. openai/gpt-4o)"
-                        />
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={newModelName}
-                                onChange={(e) => setNewModelName(e.target.value)}
-                                className="flex-1 bg-cyber-dark border border-cyber-gray p-2 rounded text-xs text-white focus:border-cyber-neon focus:outline-none"
-                                placeholder="Display Name"
-                            />
-                            <button
-                                onClick={saveBookmark}
-                                disabled={!model || !newModelName}
-                                className="bg-cyber-gray hover:bg-cyber-neon hover:text-black text-cyber-cyan p-2 rounded transition-colors disabled:opacity-50"
-                            >
-                                <Plus className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ModelPicker
+                    model={model}
+                    onModelChange={onModelChange}
+                    bookmarks={savedModels}
+                    onBookmarksChange={onSavedModelsChange}
+                    catalog={catalog}
+                />
 
                 <button
                     onClick={onClose}
