@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest';
-import { extractCode, formatDate, generateId } from './utils';
+import { formatDate, generateId } from './utils';
 
 describe('generateId', () => {
     it('returns a non-empty alphanumeric string', () => {
@@ -22,16 +22,5 @@ describe('formatDate', () => {
     it('formats an ISO date string', () => {
         const iso = '2025-11-27T12:00:00.000Z';
         expect(formatDate(iso)).toBe(new Date(iso).toLocaleString());
-    });
-});
-
-describe('extractCode (current behaviour)', () => {
-    it('extracts the first fenced js block', () => {
-        expect(extractCode('Here:\n```js\ns("bd sd")\n```\n')).toBe('s("bd sd")');
-    });
-
-    it('returns an empty string when there is no fence', () => {
-        expect(extractCode('no code here')).toBe('');
-        expect(extractCode('')).toBe('');
     });
 });

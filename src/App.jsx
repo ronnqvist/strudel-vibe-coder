@@ -7,7 +7,7 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import PlayerPanel from './components/PlayerPanel';
 import { generateStrudelCode } from './lib/openrouter';
-import { extractCode } from './lib/utils';
+import { codeFromMessage } from './lib/extractCode';
 import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
 import { useLocalStorage } from './hooks/useLocalStorage';
@@ -129,7 +129,7 @@ function App() {
                         onCancelEdit={stopEditing}
                         onSaveEdit={saveMessageEdit}
                         onLoadCode={(msg) => {
-                            const code = extractCode(msg.content);
+                            const code = codeFromMessage(msg);
                             if (code) setCurrentCode(code);
                         }}
                     />
