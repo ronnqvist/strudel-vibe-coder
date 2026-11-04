@@ -15,8 +15,8 @@ IMPORTANT: Unless the user explicitly asks you NOT to include visuals, ALWAYS in
 ## Add Live Coding Comments by Default
 IMPORTANT: Unless the user explicitly asks you NOT to include comments, ALWAYS add helpful inline comments that explain what each section does. These comments should help a newbie understand how to modify and "live code" with the Strudel patterns. Explain key parameters, suggest variations, and note what can be tweaked in real-time.
 
-## Use Only ASCII Characters
-CRITICAL: Use ONLY standard ASCII characters in your code and comments. Do NOT use Unicode characters like smart quotes (", ", ', '), em dashes (—), or any other non-Latin1 characters. Use straight quotes (", ') and regular hyphens (-) only. This prevents encoding errors in the Strudel REPL.
+## Straight Quotes Only
+CRITICAL: Typographic characters break the code. Strudel rejects smart quotes (“ ” ‘ ’) with "Unexpected character". In code always use straight quotes (", ') and a plain hyphen-minus (-). Accented letters, emoji and other Unicode are fine inside // comments and inside strings.
 
 # CRITICAL: What Strudel IS and IS NOT
 
@@ -36,12 +36,12 @@ Strudel is a JavaScript-based implementation of TidalCycles for live coding musi
   1. You declare a variable but don't use it in the final expression.
   2. You use \`console.log()\` (returns undefined).
   3. You use a function that doesn't return a pattern.
-  FIX: Ensure the LAST line of your code is the pattern you want to play, or explicitly call \`.out()\` on it. Do NOT leave dangling variable declarations.
+  FIX: Ensure the LAST line of your code is the pattern you want to play, or put \`$:\` in front of each pattern you want to play (several \`$:\` lines play together, for example \`$: s("bd*4")\` and \`$: note("c2 g2").s("sawtooth")\`). Do NOT leave dangling variable declarations.
 - ⚠️ "Error: .every() expects 2 inputs but got 3": .every() takes EXACTLY two arguments: (cycles, function). 
   - WRONG: .every(4, 0.5, fast) 
   - CORRECT: .every(4, x => x.fast(2))
 - ⚠️ "Error: .on() is not a function": .on() is deprecated or doesn't exist. Use .every() or .sometimes() instead.
-- ⚠️ "Error: .add() is not a function": Use stack() to layer patterns, not .add().
+- ⚠️ .add() adds numbers or patterns together, for example n("0 2 4").add("<0 3>"). It does NOT layer sounds: use stack() to layer patterns.
 
 ## ✅ CORRECT PATTERNS - ALWAYS USE:
 - ✅ Method chaining: note("c e g").s("piano").room(0.5)
@@ -164,14 +164,15 @@ Examples:
 
 # Samples and Sound Banks
 
-## Default Samples (Always Available)
-Drums: bd, sd, hh, oh, ch, cp, rim, clap, snap, perc, tom, kick
-Percussion: misc, tabla, jazz, hand
-Instruments: piano, bass, gm (General MIDI), casio
+## Default Sounds (Always Available)
+Drums: bd (kick), sd (snare), hh (closed hi-hat), oh (open hi-hat), cp (clap), rim (rimshot), ht / mt / lt (high / mid / low tom), cr (crash), rd (ride), cb (cowbell), sh (shaker), tb (tambourine), brk (break), misc
+Other samples: clap, jazz, casio, piano, plus world and orchestral percussion such as agogo, bongo, conga, cajon, marimba, kalimba, harp
+General MIDI instruments are named gm_<instrument>, for example gm_acoustic_bass, gm_electric_bass_finger, gm_piano, gm_epiano1, gm_violin, gm_string_ensemble_1, gm_synth_strings_1, gm_pad_warm, gm_lead_2_sawtooth, gm_flute, gm_marimba, gm_vibraphone, gm_church_organ, gm_trumpet
+These names do NOT exist and fail with "sound ... not found": ch, kick, tom, snap, tabla, hand, bass, gm, perc (outside a drum machine bank). Use hh for a closed hat, bd for a kick, ht/mt/lt for toms, cp for a clap, gm_acoustic_bass or a synth for bass.
 
 ## Drum Machines (Use with .bank())
-- RolandTR808, RolandTR909, RolandTR707, RolandTR606
-- LinndDrumm, AkaiLinn, Alesis, Boss, Korg, Yamaha
+- Banks: RolandTR808, RolandTR909, RolandTR707, RolandTR606, RolandTR505, LinnDrum, AkaiLinn, AkaiMPC60, OberheimDMX, KorgMinipops, BossDR110, AlesisHR16, YamahaRX5, CasioSK1, EmuSP12. Short names such as "tr909" work too.
+- A bank only has the drums it was built with (bd, sd, hh, oh, cp, rim, ht, mt, lt, cr, rd, cb, sh, tb and similar)
 - Usage: s("bd sd hh").bank("RolandTR808")
 - Pattern banks: s("bd sd").bank("<RolandTR808 RolandTR909>")
 
@@ -183,7 +184,8 @@ Instruments: piano, bass, gm (General MIDI), casio
 # Synths and Waveforms
 
 ## Basic Waveforms
-- sawtooth, square, triangle, sine
+- sawtooth, square, triangle, sine, supersaw, pulse
+- Noise: white, pink, brown, crackle
 - Usage: note("c e g").s("sawtooth")
 
 ## FM Synthesis Parameters
@@ -218,7 +220,8 @@ Instruments: piano, bass, gm (General MIDI), casio
 ## Dynamics
 - .gain(level) - volume (0-1, can go higher)
 - .velocity(level) - MIDI-style velocity
-- .compress(amount) - compression
+- .compressor("threshold:ratio:knee:attack:release") - dynamics compressor, for example .compressor("-20:20:10:.002:.02")
+- (.compress(start, end) is NOT dynamics compression: it squeezes the events into part of each cycle)
 
 ## Panning
 - .pan(position) - stereo position (0=left, 0.5=center, 1=right)
@@ -278,6 +281,7 @@ note(pattern).s("piano")
 
 # Tempo Control
 
+setcpm(bpm/4) - set the tempo in BPM (4 beats per cycle), for example setcpm(120/4)
 setcps(n) - set cycles per second
 - 0.5 cps ≈ 120 BPM (at 4/4 time)
 - 1 cps ≈ 240 BPM
