@@ -49,7 +49,7 @@ export function useChats() {
 
     const exportAllChats = () => {
         if (chats.length === 0) return;
-        downloadText(exportFileName(chats), JSON.stringify(buildExport(chats), null, 2));
+        downloadText(exportFileName(chats, { all: true }), JSON.stringify(buildExport(chats), null, 2));
     };
 
     /**

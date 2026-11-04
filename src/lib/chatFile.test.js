@@ -132,7 +132,12 @@ describe('exportFileName / describeImport', () => {
     });
 
     it('names an all-chats export after the date', () => {
-        expect(exportFileName([{ name: 'a' }, { name: 'b' }], NOW)).toBe('strudel-chats-backup-2026-11-04.json');
+        expect(exportFileName([{ name: 'a' }, { name: 'b' }], { all: true, now: NOW })).toBe('strudel-chats-backup-2026-11-04.json');
+    });
+
+    it('names "export all" as a backup even when there is only one chat', () => {
+        expect(exportFileName([{ name: 'only' }], { all: true, now: NOW })).toBe('strudel-chats-backup-2026-11-04.json');
+        expect(exportFileName([{ name: 'a' }, { name: 'b' }], { now: NOW })).toBe('strudel-chats-backup-2026-11-04.json');
     });
 
     it('describes a clean import and pluralises', () => {

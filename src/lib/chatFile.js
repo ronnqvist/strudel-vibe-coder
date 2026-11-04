@@ -37,9 +37,14 @@ export function buildExport(chats, now = new Date()) {
     return { format: CHAT_FILE_FORMAT, version: CHAT_FILE_VERSION, exportedAt: now.toISOString(), chats };
 }
 
-/** A file name that is safe on every platform. */
-export function exportFileName(chats, now = new Date()) {
-    if (chats.length === 1) {
+/**
+ * A file name that is safe on every platform. A single-chat export is named after the chat;
+ * "export all" is always a dated backup, even when there happens to be only one chat.
+ * @param {Chat[]} chats
+ * @param {{ all?: boolean, now?: Date }} [options]
+ */
+export function exportFileName(chats, { all = false, now = new Date() } = {}) {
+    if (!all && chats.length === 1) {
         const slug = String(chats[0].name || 'chat').replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '').slice(0, 60);
         return `strudel-chat-${slug || 'chat'}.json`;
     }
