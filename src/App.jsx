@@ -5,16 +5,41 @@ import { generateStrudelCode } from './lib/openrouter';
 import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save, Info } from 'lucide-react';
 import { extractCode, generateId, formatDate } from './lib/utils';
 
+function createChat() {
+    return {
+        id: generateId(),
+        name: `New Chat`,
+        messages: [],
+        createdAt: new Date().toISOString()
+    };
+}
+
+// Read chats from localStorage once, at startup. Guarantees at least one chat
+// and a valid current chat id (an old build could store the string "null").
+function loadInitialChats() {
+    let chats = [];
+    try {
+        const saved = localStorage.getItem('openrouter_chats');
+        if (saved) chats = JSON.parse(saved);
+    } catch {
+        chats = [];
+    }
+    if (!Array.isArray(chats)) chats = [];
+    let currentId = localStorage.getItem('openrouter_current_chat_id');
+    if (chats.length === 0) {
+        const chat = createChat();
+        return { chats: [chat], currentId: chat.id };
+    }
+    if (!chats.some(c => c.id === currentId)) currentId = chats[0].id;
+    return { chats, currentId };
+}
+
 function App() {
     const [apiKey, setApiKey] = useState(localStorage.getItem('openrouter_api_key') || '');
-    const [hashApiKey, setHashApiKey] = useState('');
-
-    useEffect(() => {
+    const [hashApiKey] = useState(() => {
         const hash = window.location.hash;
-        if (hash && hash.startsWith('#sk-or-v1-')) {
-            setHashApiKey(hash.slice(1));
-        }
-    }, []);
+        return hash && hash.startsWith('#sk-or-v1-') ? hash.slice(1) : '';
+    });
 
     const effectiveApiKey = hashApiKey || apiKey;
 
@@ -36,11 +61,9 @@ function App() {
     const [editChatName, setEditChatName] = useState('');
     const [editingMessage, setEditingMessage] = useState({ index: null, content: '' });
 
-    const [chats, setChats] = useState(() => {
-        const saved = localStorage.getItem('openrouter_chats');
-        return saved ? JSON.parse(saved) : [];
-    });
-    const [currentChatId, setCurrentChatId] = useState(localStorage.getItem('openrouter_current_chat_id') || null);
+    const [initialChats] = useState(loadInitialChats);
+    const [chats, setChats] = useState(initialChats.chats);
+    const [currentChatId, setCurrentChatId] = useState(initialChats.currentId);
 
     // Derived state for current chat messages
     const currentChat = chats.find(c => c.id === currentChatId);
@@ -53,7 +76,6 @@ function App() {
     const [showChats, setShowChats] = useState(false);
 
     const chatContainerRef = useRef(null);
-    const initializedRef = useRef(false);
 
     useEffect(() => {
         localStorage.setItem('openrouter_api_key', apiKey);
@@ -79,18 +101,6 @@ function App() {
         localStorage.setItem('openrouter_current_code', currentCode);
     }, [currentCode]);
 
-    // Initialize a chat if none exists
-    useEffect(() => {
-        if (initializedRef.current) return;
-        initializedRef.current = true;
-
-        if (chats.length === 0) {
-            createNewChat();
-        } else if (!currentChatId) {
-            setCurrentChatId(chats[0].id);
-        }
-    }, []);
-
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -98,12 +108,7 @@ function App() {
     }, [chatHistory]);
 
     const createNewChat = () => {
-        const newChat = {
-            id: generateId(),
-            name: `New Chat`,
-            messages: [],
-            createdAt: new Date().toISOString()
-        };
+        const newChat = createChat();
         setChats(prev => [newChat, ...prev]);
         setCurrentChatId(newChat.id);
         setShowChats(false);
