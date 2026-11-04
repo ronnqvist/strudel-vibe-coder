@@ -36,3 +36,6 @@ export const LEGACY_DEFAULT_BOOKMARK_IDS = [
     'google/gemini-3-pro-preview',
     'openai/gpt-5.1',
 ];
+
+/** Suggestions shown in an empty chat. Plain ASCII, so they work with any model. */
+export const STARTER_PROMPTS = ['acid techno bass', 'dusty boom bap', 'lush ambient pads'];

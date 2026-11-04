@@ -2,7 +2,7 @@
 import React from 'react';
 import { Send, Square } from 'lucide-react';
 
-const ChatInput = ({ value, onChange, onSend, onStop, disabled, hasMessages }) => {
+const ChatInput = ({ value, onChange, onSend, onStop, disabled, hasMessages, inputRef }) => {
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -14,6 +14,7 @@ const ChatInput = ({ value, onChange, onSend, onStop, disabled, hasMessages }) =
         <div className="p-4 bg-cyber-black border-t border-cyber-gray">
             <div className="flex gap-2">
                 <input
+                    ref={inputRef}
                     type="text"
                     value={value}
                     onChange={(e) => onChange(e.target.value)}

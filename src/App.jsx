@@ -6,6 +6,7 @@ import SettingsModal from './components/SettingsModal';
 import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import PlayerPanel from './components/PlayerPanel';
+import MobileTabs from './components/MobileTabs';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
 import { useChats } from './hooks/useChats';
@@ -22,8 +23,11 @@ function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [streaming, setStreaming] = useState(null); // { chatId, text } while a reply is arriving
     const [announcement, setAnnouncement] = useState(''); // read out by screen readers
+    const [tab, setTab] = useState('chat'); // narrow screens show one panel at a time
+    const inputRef = useRef(null);
     const abortRef = useRef(null);
     const [currentCode, setCurrentCode] = useLocalStorage('openrouter_current_code', '');
+    const [seenCode, setSeenCode] = useState(currentCode); // the pattern last shown on the Stage tab
     const [showSettings, setShowSettings] = useState(false);
     const [showChats, setShowChats] = useState(false);
     const [editingMessage, setEditingMessage] = useState({ index: null, content: '' });
@@ -39,6 +43,18 @@ function App() {
         return () => window.removeEventListener('keydown', onKey);
     }, [isLoading]);
     useEffect(() => () => abortRef.current?.abort(), []);
+
+    // Entering or leaving the Stage tab counts as having seen the current pattern
+    const showTab = (next) => {
+        if (next === 'stage' || tab === 'stage') setSeenCode(currentCode);
+        setTab(next);
+    };
+
+    // A chip puts its text in the message box (it does not send, which could spend the user's credits)
+    const pickPrompt = (text) => {
+        setInput(text);
+        inputRef.current?.focus();
+    };
 
     const stopEditing = () => setEditingMessage({ index: null, content: '' });
 
@@ -130,6 +146,8 @@ function App() {
 
             {/* Main Content - Split View */}
             <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+                <MobileTabs tab={tab} onChange={showTab} stageHasNews={tab === 'chat' && currentCode !== seenCode} />
+
                 {showChats && (
                     <ChatSidebar
                         chats={chat.chats}
@@ -166,12 +184,13 @@ function App() {
                 )}
 
                 {/* Chat Section */}
-                <div className="w-full md:w-1/2 flex flex-col border-r border-cyber-gray bg-cyber-dark/50">
+                <div className={`${tab === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 md:flex-none w-full md:w-1/2 flex-col border-r border-cyber-gray bg-cyber-dark/50`}>
                     <MessageList
                         messages={chat.messages}
                         isLoading={isLoading}
                         streamingText={streaming?.chatId === chat.currentChatId ? streaming.text : null}
                         streamingModel={settings.modelName}
+                        onPickPrompt={pickPrompt}
                         editing={editingMessage}
                         onEditContentChange={(content) => setEditingMessage({ ...editingMessage, content })}
                         onStartEdit={(index, content) => setEditingMessage({ index, content })}
@@ -189,10 +208,11 @@ function App() {
                         onStop={stopGenerating}
                         disabled={isLoading}
                         hasMessages={chat.messages.length > 0}
+                        inputRef={inputRef}
                     />
                 </div>
 
-                <PlayerPanel code={currentCode} />
+                <PlayerPanel code={currentCode} visibleOnMobile={tab === 'stage'} />
             </main>
         </div>
     );
