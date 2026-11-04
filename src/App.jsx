@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import StrudelPlayer from './components/StrudelPlayer';
+import StrudelFrame from './components/StrudelFrame';
 import { generateStrudelCode } from './lib/openrouter';
 import { Send, Settings, Play, StopCircle, Music, Terminal, Plus, Trash2, Import, MessageSquare, Download, Upload, X, Edit2, Check, Save, Info } from 'lucide-react';
 import { extractCode, generateId, formatDate } from './lib/utils';
@@ -734,9 +734,9 @@ function App() {
                     </div>
                 </div>
 
-                {/* Strudel Embed Section */}
+                {/* Strudel player (strudel.cc in an iframe) */}
                 <div className="w-full md:w-1/2 h-1/2 md:h-full bg-black flex flex-col">
-                    <StrudelPlayer code={currentCode} />
+                    <StrudelFrame code={currentCode} />
                 </div>
 
             </div>

@@ -40,10 +40,3 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #00f3ff;
 }
-
-/* Strudel Embed Override */
-strudel-repl iframe {
-  width: 100% !important;
-  height: 100% !important;
-  border: none;
-}
