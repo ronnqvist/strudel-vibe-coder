@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: MIT
 import { generateId } from './utils';
+import { adoptLegacyCode } from './revisions';
 
 export const CHATS_KEY = 'openrouter_chats';
 export const CURRENT_CHAT_KEY = 'openrouter_current_chat_id';
+/**
+ * The pattern in the player. Earlier versions had one global pattern here; now each chat has its
+ * own (see revisions.js), and this key mirrors the active chat's, so that an earlier version
+ * still finds the pattern after a rollback.
+ */
+export const LEGACY_CODE_KEY = 'openrouter_current_code';
 
 /**
  * @typedef {{ id?: string, role: 'user' | 'assistant', content: string, code?: string | null, model?: string,
@@ -31,6 +38,10 @@ export function createChat() {
  * Read chats from storage once, at startup. Always returns at least one chat and
  * a current id that exists. Handles missing or corrupt data, and the string "null"
  * that older builds stored as the current id after the last chat was deleted.
+ *
+ * Migrations (idempotent, nothing is removed): messages without an id get one, and the global
+ * pattern of earlier versions (LEGACY_CODE_KEY) becomes the current chat's selected revision when
+ * it differs from it.
  * @param {Pick<Storage, 'getItem'>} [storage]
  * @returns {{ chats: Chat[], currentId: string }}
  */
@@ -45,12 +56,20 @@ export function loadInitialChats(storage = localStorage) {
     if (!Array.isArray(chats)) chats = [];
     chats = chats.filter(c => c && typeof c.id === 'string' && Array.isArray(c.messages)).map(c => withMessageIds(c));
 
+    let legacyCode = null;
+    try {
+        legacyCode = storage.getItem(LEGACY_CODE_KEY);
+    } catch {
+        legacyCode = null;
+    }
+
     if (chats.length === 0) {
-        const chat = createChat();
+        const chat = adoptLegacyCode(createChat(), legacyCode);
         return { chats: [chat], currentId: chat.id };
     }
     const stored = storage.getItem(CURRENT_CHAT_KEY);
     const currentId = chats.some(c => c.id === stored) ? stored : chats[0].id;
+    chats = chats.map(c => (c.id === currentId ? adoptLegacyCode(c, legacyCode) : c));
     return { chats, currentId };
 }
 

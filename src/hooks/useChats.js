@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { useEffect, useState } from 'react';
-import { CHATS_KEY, CURRENT_CHAT_KEY, createChat, loadInitialChats, removeChat, resetChats, withMessageIds } from '../lib/chats';
+import { CHATS_KEY, CURRENT_CHAT_KEY, LEGACY_CODE_KEY, createChat, loadInitialChats, removeChat, resetChats, withMessageIds } from '../lib/chats';
+import { stageCode } from '../lib/revisions';
 import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile } from '../lib/chatFile';
 import { downloadText } from '../lib/download';
 
@@ -19,6 +20,12 @@ export function useChats() {
     }, [currentChatId]);
 
     const currentChat = chats.find(c => c.id === currentChatId);
+    const currentStageCode = stageCode(currentChat);
+
+    // Keep the key earlier versions read the player's pattern from in step with the active chat
+    useEffect(() => {
+        try { localStorage.setItem(LEGACY_CODE_KEY, currentStageCode); } catch { /* storage unavailable */ }
+    }, [currentStageCode]);
 
     const updateChat = (id, patch) => {
         setChats(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
@@ -37,6 +44,7 @@ export function useChats() {
         const chat = createChat();
         setChats(prev => [chat, ...prev]);
         setCurrentChatId(chat.id);
+        return chat.id;
     };
 
     const deleteChat = (id) => {
@@ -90,6 +98,7 @@ export function useChats() {
         currentChat,
         currentChatId,
         messages: currentChat ? currentChat.messages : [],
+        stageCode: currentStageCode,
         selectChat: setCurrentChatId,
         updateChat,
         updateChatWith,
