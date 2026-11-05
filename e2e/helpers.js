@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 /** Server-sent-events body in the shape OpenRouter streams. */
-export function sseBody(content, model = 'vendor/resolved-1') {
+export function sseBody(content, model = 'vendor/resolved-1', finishReason = 'stop') {
     const chunk = { model, choices: [{ delta: { content } }] };
-    return `data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`;
+    const end = { model, choices: [{ delta: {}, finish_reason: finishReason }] };
+    return `data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(end)}\n\ndata: [DONE]\n\n`;
 }
 
 /** What the player URL decodes to (the app puts base64(UTF-8 code) after the # of strudel.cc). */
@@ -27,10 +28,10 @@ const MODELS_FIXTURE = {
  * - OpenRouter's model list and chat endpoint are mocked; chat requests are recorded
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ reply?: string, model?: string }} [options] what the mocked model answers
+ * @param {{ reply?: string, model?: string, finishReason?: string }} [options] what the mocked model answers
  * @returns {{ chatRequests: { body: any, headers: Record<string, string> }[] }}
  */
-export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', model = 'vendor/resolved-1' } = {}) {
+export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', model = 'vendor/resolved-1', finishReason = 'stop' } = {}) {
     const chatRequests = [];
     // Routes registered later win, so the catch-all goes first.
     await page.route('**/*', (route) => {
@@ -44,7 +45,7 @@ export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', mode
     await page.route('https://openrouter.ai/api/v1/chat/completions', (route) => {
         const request = route.request();
         chatRequests.push({ body: JSON.parse(request.postData() ?? '{}'), headers: request.headers() });
-        return route.fulfill({ contentType: 'text/event-stream', headers: { 'access-control-allow-origin': '*' }, body: sseBody(reply, model) });
+        return route.fulfill({ contentType: 'text/event-stream', headers: { 'access-control-allow-origin': '*' }, body: sseBody(reply, model, finishReason) });
     });
     return { chatRequests };
 }

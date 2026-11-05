@@ -109,6 +109,7 @@ function App() {
             code: result.code,
             model: result.modelLabel ?? settings.modelName,
             ...(result.stopped && { stopped: true }),
+            ...(result.truncated && { truncated: true }),
         });
 
         try {
@@ -135,9 +136,12 @@ function App() {
             chat.updateChat(chatId, { messages: [...updatedMessages, reply(result)], name });
 
             // Load the pattern into the player only when the reply is complete and the code parses
-            const loaded = result.code && !result.stopped ? await loadIntoPlayer(result.code) : false;
+            const complete = !result.stopped && !result.truncated;
+            const loaded = result.code && complete ? await loadIntoPlayer(result.code) : false;
+            if (result.truncated) setPlayerNotice('Not loaded into the player: the reply was cut off at the model\'s length limit, so its code is incomplete. The previous pattern is still loaded.');
             setAnnouncement(result.stopped
                 ? 'Generation stopped'
+                : result.truncated ? 'Reply was cut off at the length limit. The pattern was not loaded.'
                 : !result.code ? 'Reply received'
                     : loaded ? 'Reply received. The pattern was loaded into the player.'
                         : 'Reply received. The pattern has a syntax error and was not loaded.');

@@ -19,7 +19,8 @@ import { appReferer } from './urlKey';
  * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void }} [options]
  *   `signal` stops the request; the text received so far is then returned with `stopped: true`.
  *   `onText` is called with the full reply text every time it grows.
- * @returns {Promise<{ role: 'assistant', content: string, code: string | null, stopped: boolean, resolvedModel: string | null, modelLabel: string }>}
+ * @returns {Promise<{ role: 'assistant', content: string, code: string | null, stopped: boolean, truncated: boolean, resolvedModel: string | null, modelLabel: string }>}
+ *   `truncated` is true when the provider ended the reply at its length limit (`finish_reason: "length"`).
  *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases);
  *   `modelLabel` is what to show for it: the concrete model for an alias, the display name otherwise.
  *   If the stream fails midway the thrown error carries the text received so far in `error.partial`.
@@ -38,6 +39,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     let content = "";
     let resolvedModel = null;
     let stopped = false;
+    let finishReason = null;
 
     try {
         const response = await fetch(OPENROUTER_API_URL, {
@@ -71,6 +73,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
             }
             content = data.choices[0].message.content;
             resolvedModel = data.model || null;
+            finishReason = data.choices[0].finish_reason || null;
             onText?.(content);
         } else {
             for await (const payload of readSSE(response.body)) {
@@ -85,6 +88,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     throw new Error(chunk.error.message || "The model reported an error");
                 }
                 resolvedModel = chunk.model || resolvedModel;
+                finishReason = chunk.choices?.[0]?.finish_reason || finishReason;
                 const delta = chunk.choices?.[0]?.delta?.content;
                 if (delta) {
                     content += delta;
@@ -108,5 +112,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     // For a `~...-latest` alias, name the model that really answered
     const modelLabel = resolvedModel && resolvedModel !== model ? resolvedModel : (modelName || model);
     const code = withAttribution(extractCode(content), modelLabel) || null;
-    return { role: "assistant", content, code, stopped, resolvedModel, modelLabel };
+    // The provider stopped at its output-token limit: the reply (and any code in it) is incomplete
+    const truncated = !stopped && finishReason === "length";
+    return { role: "assistant", content, code, stopped, truncated, resolvedModel, modelLabel };
 }

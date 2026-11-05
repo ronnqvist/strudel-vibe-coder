@@ -104,6 +104,15 @@ describe('generateStrudelCode: streaming', () => {
         expect(result.role).toBe('assistant');
     });
 
+    it('marks a reply that ended at the length limit as truncated, and a normal one as not', async () => {
+        mockStream([delta('```js\n$: s("bd*4")'), sseChunk({ choices: [{ delta: {}, finish_reason: 'length' }] }), 'data: [DONE]\n\n']);
+        const cut = await generateStrudelCode('k', 'm', convo, 'M');
+        expect(cut).toMatchObject({ truncated: true, stopped: false, content: '```js\n$: s("bd*4")' });
+
+        mockStream([delta('```js\ns("bd")\n```'), sseChunk({ choices: [{ delta: {}, finish_reason: 'stop' }] }), 'data: [DONE]\n\n']);
+        expect((await generateStrudelCode('k', 'm', convo, 'M')).truncated).toBe(false);
+    });
+
     it('uses the display name when the model that answered is the one that was asked for', async () => {
         mockStream([sseChunk({ model: 'a/b', choices: [{ delta: { content: '```js\ns("bd")\n```' } }] }), 'data: [DONE]\n\n']);
         const result = await generateStrudelCode('k', 'a/b', convo, 'My Model');

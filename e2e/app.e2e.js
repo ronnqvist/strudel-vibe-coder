@@ -210,6 +210,20 @@ test('a reply with a syntax error does not replace the working pattern; a valid 
     await expect(page.getByRole('alert').filter({ hasText: 'Not loaded into the player' })).toHaveCount(0);
 });
 
+test('a reply cut off at the length limit is marked and not loaded, even when its code parses', async ({ page }) => {
+    await mockNetwork(page, { reply: '```js\n$: s("bd*4")', finishReason: 'length' }); // unclosed fence, but valid JS
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_current_code: '$: s("hh*8")' });
+    await page.goto('./');
+    const before = await page.locator('iframe').getAttribute('src');
+
+    await page.getByLabel('Message', { exact: true }).fill('long one');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status')).toHaveText('Reply was cut off at the length limit. The pattern was not loaded.');
+    await expect(page.getByRole('alert').filter({ hasText: 'Not loaded into the player' })).toContainText('cut off');
+    await expect(page.getByText('cut off', { exact: true })).toBeVisible();
+    expect(await page.locator('iframe').getAttribute('src')).toBe(before);
+});
+
 test('keyboard users enter the player with a button, and the iframe is not a Tab trap', async ({ page }) => {
     await mockNetwork(page);
     await page.goto('./');

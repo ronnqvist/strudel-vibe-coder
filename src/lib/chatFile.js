@@ -59,6 +59,7 @@ function cleanMessage(m) {
     if (typeof m.code === 'string' || m.code === null) message.code = m.code;
     if (typeof m.model === 'string') message.model = m.model;
     if (m.stopped === true) message.stopped = true;
+    if (m.truncated === true) message.truncated = true;
     return message;
 }
 
