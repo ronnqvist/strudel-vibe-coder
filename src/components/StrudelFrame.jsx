@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import React, { useState } from 'react';
-import { MAX_URL_LENGTH, normalizeTypography, shortHash, strudelUrl } from '../lib/strudelUrl';
+import { MAX_URL_LENGTH, shortHash, strudelUrl } from '../lib/strudelUrl';
 
 /**
  * Shows the strudel.cc REPL in an iframe, preloaded with `code`.
@@ -23,7 +23,7 @@ const StrudelFrame = ({ code }) => {
     if (src.length > MAX_URL_LENGTH) {
         const copy = async () => {
             try {
-                await navigator.clipboard.writeText(normalizeTypography(code));
+                await navigator.clipboard.writeText(code);
                 setCopied(true);
             } catch {
                 setCopied(false);

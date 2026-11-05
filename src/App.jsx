@@ -9,7 +9,7 @@ import PlayerPanel from './components/PlayerPanel';
 import MobileTabs from './components/MobileTabs';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
-import { patternSyntaxError } from './lib/patternCheck';
+import { preparePattern } from './lib/patternCheck';
 import { announcement as describeOutcome, apiConversation, canAutoLoad, notLoadedNotice } from './lib/generation';
 import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
@@ -61,16 +61,17 @@ function App() {
 
     /**
      * Load a pattern into the player unless it is not valid JavaScript, so a broken reply cannot
-     * replace a pattern that works. Returns whether it was loaded.
+     * replace a pattern that works. The player gets exactly the code that was validated
+     * (possibly with curly quotes repaired, which the notice then says). Returns whether it was loaded.
      */
     const loadIntoPlayer = async (code) => {
-        const error = await patternSyntaxError(code);
-        if (error) {
-            setPlayerNotice(`Not loaded into the player: the code has a syntax error (${error}). The previous pattern is still loaded.`);
+        const prepared = await preparePattern(code);
+        if (!prepared.ok) {
+            setPlayerNotice(`Not loaded into the player: the code has a syntax error (${prepared.error}). The previous pattern is still loaded.`);
             return false;
         }
-        setPlayerNotice('');
-        setCurrentCode(code);
+        setPlayerNotice(prepared.repaired ? 'Loaded with typographic quotes and dashes in the code replaced by plain ones, so that it runs.' : '');
+        setCurrentCode(prepared.code);
         return true;
     };
 
