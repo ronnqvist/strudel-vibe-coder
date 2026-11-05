@@ -12,6 +12,7 @@ import { generateId } from '../lib/utils';
  * @returns {{
  *   begin: (chatId: string) => { requestId: string, signal: AbortSignal, onText: (text: string) => void, end: () => void },
  *   isBusy: (chatId: string) => boolean,
+ *   isRunning: (chatId: string) => boolean,
  *   textFor: (chatId: string) => string | null,
  *   stop: (chatId: string) => void,
  *   busyChatIds: string[],
@@ -58,6 +59,9 @@ export function useRequests() {
     return {
         begin,
         isBusy: (chatId) => Boolean(pending[chatId]),
+        // For event handlers: true from the moment a request begins, before React re-renders,
+        // so a quick second Enter cannot start a second request in the same chat
+        isRunning: (chatId) => controllers.current.has(chatId),
         textFor: (chatId) => pending[chatId]?.text || null,
         stop: (chatId) => controllers.current.get(chatId)?.controller.abort(),
         busyChatIds: Object.keys(pending),

@@ -580,3 +580,21 @@ test('the conversation stops following new text when the reader scrolls up', asy
     await list.evaluate((el) => { el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
     expect(await atBottom()).toBe(true);
 });
+
+test('pressing Enter twice quickly sends one request', async ({ page }) => {
+    await mockNetwork(page);
+    const counter = await delayedReply(page, '```js\ns("bd")\n```', { ms: 800 });
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+    await page.goto('./');
+    const box = page.getByLabel('Message', { exact: true });
+    await box.fill('beat');
+    await box.evaluate((el) => {
+        const enter = () => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        enter();
+        enter();
+    });
+    await expect(page.getByRole('status')).toHaveText(/Reply received/, { timeout: 5000 });
+    expect(counter.requests).toBe(1);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats'))[0].messages.map(m => m.role));
+    expect(saved).toEqual(['user', 'assistant']);
+});
