@@ -550,3 +550,21 @@ test('custom music instructions are added to the prompt, and can be reset, expor
     const system = chatRequests[0].body.messages[0].content;
     expect(system.endsWith("# The User's Own Music Instructions\nFollow these where they do not conflict with the output contract and the Strudel facts above:\nPrefer minor keys and slow tempos.")).toBe(true);
 });
+
+test('pressing Enter twice quickly sends one request', async ({ page }) => {
+    await mockNetwork(page);
+    const counter = await delayedReply(page, '```js\ns("bd")\n```', { ms: 800 });
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+    await page.goto('./');
+    const box = page.getByLabel('Message', { exact: true });
+    await box.fill('beat');
+    await box.evaluate((el) => {
+        const enter = () => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        enter();
+        enter();
+    });
+    await expect(page.getByRole('status')).toHaveText(/Reply received/, { timeout: 5000 });
+    expect(counter.requests).toBe(1);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats'))[0].messages.map(m => m.role));
+    expect(saved).toEqual(['user', 'assistant']);
+});
