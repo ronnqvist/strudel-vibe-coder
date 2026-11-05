@@ -48,7 +48,12 @@ Tests use mocked providers only. Never make paid model calls, never commit keys 
 - `src/lib/chats.js`, `src/lib/chatFile.js`: chat state helpers, startup migration, export/import.
 - `src/hooks/useChats.js` (state + persistence), `useRequests.js` (one request per chat, own
   AbortController), `useSettings.js`, `useModelCatalog.js`.
-- `src/lib/systemPrompt.js`: the system prompt. Every API fact in it must match strudel.cc/learn.
+- `src/lib/prompt/`: the system prompt, composed per request: `contract.js` → `core.js` →
+  modules (`modules.js`, chosen by the rules in `select.js`, never by a model call) →
+  `preferences.js` → the user's own instructions. `request.js` attaches the pattern on stage to
+  the newest message and trims old code from long chats. Bump `PROMPT_VERSION` (and the hash in
+  `prompt.test.js`) on any text change. Every API fact must match strudel.cc/learn; check new
+  examples in the real REPL. `src/lib/systemPrompt.js` is the full prompt, used by the tests.
 - `scripts/csp.js`: the Content-Security-Policy for the build.
 
 ## State rules
@@ -67,6 +72,8 @@ Tests use mocked providers only. Never make paid model calls, never commit keys 
 | `openrouter_current_code` | mirror of the viewed chat's stage pattern (read by earlier versions) |
 | `openrouter_api_key`, `openrouter_remember_key` | key (only while "remember" is on) and that setting |
 | `openrouter_model`, `openrouter_saved_models` | selected model and bookmarks |
+| `openrouter_prompt_prefs` | `{ visuals, explanation }`: `auto`, `always` or `never`; `none`, `brief` or `teaching` |
+| `openrouter_custom_instructions` | the user's own music instructions (max 2,000 characters) |
 
 Migration rules:
 

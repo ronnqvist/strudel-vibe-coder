@@ -1,6 +1,6 @@
 # Strudel Vibe Coder
 
-Describe music in plain language and get live-coded [Strudel](https://strudel.cc/) patterns, with Hydra visuals and comments that teach you how to tweak them. The pattern opens in the Strudel player next to the chat, where you can play it, edit it and ask for changes.
+Describe music in plain language and get live-coded [Strudel](https://strudel.cc/) patterns, with comments that show you how to tweak them and, if you like, Hydra visuals. The pattern opens in the Strudel player next to the chat, where you can play it, edit it and ask for changes.
 
 - **Live:** https://ronnqvist.github.io/strudel-vibe-coder/
 - **Grok edition:** https://strudel.grok.me/ is a separate app built on this idea, using a Grok subscription (with OpenRouter as an option). It has its own codebase.
@@ -12,6 +12,10 @@ Describe music in plain language and get live-coded [Strudel](https://strudel.cc
 3. When the reply is complete and its code is valid JavaScript, the code is loaded into the player, which is strudel.cc shown in an iframe. Press play there. A reply that was cut off, interrupted, refused or failed is marked in the chat and does not replace the pattern that is playing.
 4. Each chat has its own pattern. Switching chats shows that chat's pattern (and stops the music that was playing), and a reply that finishes in another chat stays in that chat. **Use this version** puts an earlier reply back in the player, and **Restore previous** undoes the last change.
 5. Your next message asks the model to change the pattern that is in the player. Edits you make in the Strudel editor are not sent back to this app (it cannot read the player, by design). To continue from them, copy the code from the player and use **Use edited code**. **Fix an error** sends an error message from the player to the model.
+
+**Settings > Music** sets whether the model adds Hydra visuals (by default only when you ask, or when the pattern already has them) and how much it explains. Under **Advanced** you can add your own music instructions; they are added to the app's instructions and do not switch off its checks.
+
+The system prompt is put together for each request from a short output contract, the core Strudel guidance, and only the topic sections the request needs (synthesis, samples, harmony, arrangement, Hydra), picked by simple word rules. Its version is stored with each reply.
 
 The code reaches the player exactly as it is shown in the chat. Only when a reply's code does not parse because the model used typographic quotes or dashes as JavaScript punctuation, the app straightens them, checks that the result parses, and says so.
 
@@ -41,7 +45,7 @@ npm run licenses   # licences of every package that ends up in the bundle
 
 The end-to-end tests need a browser: run `npx playwright install chromium` once (or set `PW_CHROMIUM_PATH` to an installed Chromium). They are hermetic: OpenRouter and strudel.cc are mocked, and every other host is blocked.
 
-Layout: `src/components` (UI), `src/hooks` (state), `src/lib` (OpenRouter client, streaming, URL encoding for strudel.cc, chat files, system prompt), `src/config.js` (default models, URLs, starter prompts), `scripts/` (Content-Security-Policy and licence check), `e2e/` (Playwright).
+Layout: `src/components` (UI), `src/hooks` (state), `src/lib` (OpenRouter client, streaming, URL encoding for strudel.cc, chat files), `src/lib/prompt` (the system prompt and its modules), `src/config.js` (default models, URLs, starter prompts), `scripts/` (Content-Security-Policy and licence check), `e2e/` (Playwright).
 
 The production build includes a strict Content-Security-Policy (`scripts/csp.js`). It allows only the app itself, `openrouter.ai` for requests and `strudel.cc` for the player. A `<meta>` policy cannot stop other sites from embedding the app (`frame-ancestors`); that needs HTTP headers, which GitHub Pages does not offer.
 
