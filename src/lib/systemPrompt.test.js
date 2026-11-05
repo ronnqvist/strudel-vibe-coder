@@ -10,7 +10,7 @@ const ABSENT = ['ch', 'kick', 'tom', 'snap', 'tabla', 'hand', 'bass', 'gm'];
 describe('system prompt: things that used to be wrong', () => {
     it('no longer forbids non-ASCII text; it asks for straight quotes only', () => {
         expect(SYSTEM_PROMPT).not.toMatch(/Use Only ASCII/i);
-        expect(SYSTEM_PROMPT).toMatch(/Straight Quotes Only/);
+        expect(SYSTEM_PROMPT).toMatch(/Straight quotes only/);
         expect(SYSTEM_PROMPT).toMatch(/Accented letters, emoji and other Unicode are fine/);
     });
 
@@ -41,7 +41,7 @@ describe('system prompt: things that used to be wrong', () => {
 
     it('offers $: as the way to play several patterns, instead of .out()', () => {
         expect(SYSTEM_PROMPT).not.toMatch(/explicitly call `\.out\(\)`/);
-        expect(SYSTEM_PROMPT).toMatch(/put `\$:` in front of each pattern/);
+        expect(SYSTEM_PROMPT).toMatch(/every line that starts with `\$:`/);
     });
 
     it('mentions setcpm for BPM', () => {
@@ -59,9 +59,9 @@ describe('system prompt: its own examples', () => {
 });
 
 describe('system prompt: behaviour the app relies on', () => {
-    it('asks for Hydra visuals and teaching comments by default, and a fenced js block', () => {
-        expect(SYSTEM_PROMPT).toMatch(/await initHydra\(\)/);
-        expect(SYSTEM_PROMPT).toMatch(/Add Live Coding Comments by Default/);
+    it('the full prompt asks for Hydra visuals and teaching comments, and a fenced js block', () => {
+        expect(SYSTEM_PROMPT).toMatch(/Include Hydra visuals with the music/);
+        expect(SYSTEM_PROMPT).toMatch(/explain what each section does for someone new to live coding/);
         expect(SYSTEM_PROMPT).toMatch(/```javascript/);
     });
 
