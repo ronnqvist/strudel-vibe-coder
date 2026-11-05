@@ -209,3 +209,142 @@ describe('generateStrudelCode: other responses', () => {
         await expect(generateStrudelCode('k', 'm', convo)).rejects.toThrow('OpenRouter API Error: 502 Bad Gateway');
     });
 });
+
+/**
+ * How a reply ended (#5). Only `completed` may be loaded into the player automatically.
+ * OpenRouter's documented signals (https://openrouter.ai/docs/api-reference/streaming,
+ * https://openrouter.ai/docs/api-reference/errors): a terminal `finish_reason` on the last chunk,
+ * then `data: [DONE]`; a mid-stream failure is a chunk with a top-level `error` and
+ * `finish_reason: "error"`, still under HTTP 200.
+ */
+describe('generateStrudelCode: how the reply ended', () => {
+    const done = 'data: [DONE]\n\n';
+    const finish = (reason, extra = {}) => sseChunk({ choices: [{ delta: {}, finish_reason: reason, ...extra }] });
+    const run = () => generateStrudelCode('k', 'm', convo, 'M');
+    beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}));
+
+    it('a stream that closes with no terminal signal is interrupted, not completed', async () => {
+        mockStream([delta('Here:\n```js\ns("bd sd")')]);
+        const result = await run();
+        expect(result.status).toBe('interrupted');
+        expect(result.content).toBe('Here:\n```js\ns("bd sd")');
+    });
+
+    it('finish_reason "stop" without [DONE] is completed', async () => {
+        mockStream([delta('```js\ns("bd")\n```'), finish('stop')]);
+        expect((await run()).status).toBe('completed');
+    });
+
+    it('[DONE] without any finish_reason is completed', async () => {
+        mockStream([delta('```js\ns("bd")\n```'), done]);
+        expect((await run()).status).toBe('completed');
+    });
+
+    it('finish_reason "length" is truncated', async () => {
+        mockStream([delta('```js\ns("bd")'), finish('length'), done]);
+        expect((await run())).toMatchObject({ status: 'truncated', finishReason: 'length' });
+    });
+
+    it('an empty reply that hit the length limit is truncated, not "no response"', async () => {
+        mockStream([finish('length'), done]); // a reasoning model that spent its budget thinking
+        expect((await run()).status).toBe('truncated');
+    });
+
+    it('finish_reason "content_filter" is refused', async () => {
+        mockStream([delta('```js\ns("bd")\n```'), finish('content_filter'), done]);
+        expect((await run()).status).toBe('refused');
+    });
+
+    it('a refusal delta is refused', async () => {
+        mockStream([sseChunk({ choices: [{ delta: { refusal: 'I cannot help with that.' } }] }), finish('stop'), done]);
+        const result = await run();
+        expect(result.status).toBe('refused');
+        expect(result.content).toContain('I cannot help with that.');
+    });
+
+    it('a mid-stream error chunk (HTTP 200) is error and keeps the partial text', async () => {
+        mockStream([delta('part'), sseChunk({ error: { code: 502, message: 'Provider disconnected', metadata: { error_type: 'provider_unavailable' } }, choices: [{ delta: { content: '' }, finish_reason: 'error' }] })]);
+        const result = await run();
+        expect(result).toMatchObject({ status: 'error', content: 'part', error: { message: 'Provider disconnected', code: 502, type: 'provider_unavailable' } });
+    });
+
+    it('a stream whose only event is an error is error', async () => {
+        mockStream([sseChunk({ error: { message: 'Rate limited' } })]);
+        expect((await run())).toMatchObject({ status: 'error', content: '', error: { message: 'Rate limited' } });
+    });
+
+    it('finish_reason "error" without an error object is error', async () => {
+        mockStream([delta('part'), finish('error'), done]);
+        expect((await run()).status).toBe('error');
+    });
+
+    it('an unknown finish_reason still ends the reply as completed, and is recorded', async () => {
+        mockStream([delta('```js\ns("bd")\n```'), finish('tool_calls', { native_finish_reason: 'tool_use' }), done]);
+        expect((await run())).toMatchObject({ status: 'completed', finishReason: 'tool_calls', nativeFinishReason: 'tool_use' });
+    });
+
+    it('a stopped request is aborted and keeps the partial text', async () => {
+        const controller = new AbortController();
+        vi.stubGlobal('fetch', vi.fn(async (_url, init) => ({
+            ok: true,
+            headers: { get: () => 'text/event-stream' },
+            body: new ReadableStream({
+                start(c) {
+                    c.enqueue(enc.encode(delta('```js\ns("bd")')));
+                    init.signal.addEventListener('abort', () => c.error(new DOMException('Aborted', 'AbortError')));
+                },
+            }),
+        })));
+        const result = await generateStrudelCode('k', 'm', convo, 'M', { signal: controller.signal, onText: () => controller.abort() });
+        expect(result).toMatchObject({ status: 'aborted', content: '```js\ns("bd")' });
+    });
+
+    it('a stream that ends with no text at all is error', async () => {
+        mockStream([done]);
+        expect((await run())).toMatchObject({ status: 'error', error: { message: 'No response from model' } });
+    });
+
+    it('records usage from the final chunk', async () => {
+        mockStream([delta('x'), sseChunk({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6, cost: 0.0001 } }), done]);
+        expect((await run()).usage).toEqual({ prompt_tokens: 5, completion_tokens: 1, total_tokens: 6, cost: 0.0001 });
+    });
+
+    it('an HTTP error is error with the API message, not a thrown exception', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => ({
+            ok: false, status: 402, statusText: 'Payment Required',
+            json: async () => ({ error: { code: 402, message: 'Insufficient credits' } }),
+        })));
+        expect((await run())).toMatchObject({ status: 'error', content: '', error: { message: 'Insufficient credits', code: 402 } });
+    });
+
+    it('a network failure is error, not a thrown exception', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+        expect((await run())).toMatchObject({ status: 'error', error: { message: 'Failed to fetch' } });
+    });
+
+    describe('JSON reply (provider ignored stream: true)', () => {
+        const json = (body) => vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, headers: { get: () => 'application/json' }, json: async () => body })));
+        const message = (content, finish_reason) => ({ choices: [{ message: { content }, finish_reason }] });
+
+        it('a body without finish_reason is completed: a JSON body that parsed cannot have been cut off', async () => {
+            json(message('```js\ns("bd")\n```'));
+            expect((await run()).status).toBe('completed');
+        });
+        it('maps length, content_filter and error like the stream', async () => {
+            json(message('```js\ns("bd")', 'length'));
+            expect((await run()).status).toBe('truncated');
+            json(message('no', 'content_filter'));
+            expect((await run()).status).toBe('refused');
+            json(message('', 'error'));
+            expect((await run()).status).toBe('error');
+        });
+        it('a 200 body that is only an error object is error', async () => {
+            json({ error: { code: 429, message: 'Rate limited' } });
+            expect((await run())).toMatchObject({ status: 'error', error: { message: 'Rate limited', code: 429 } });
+        });
+        it('a message.refusal is refused', async () => {
+            json({ choices: [{ message: { content: null, refusal: 'No.' }, finish_reason: 'stop' }] });
+            expect((await run())).toMatchObject({ status: 'refused', content: 'No.' });
+        });
+    });
+});
