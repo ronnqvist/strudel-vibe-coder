@@ -15,6 +15,8 @@ import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
 import { useModelCatalog } from './hooks/useModelCatalog';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { appendMessage, nameAfterFirstMessage, updateMessage } from './lib/chats';
+import { generateId } from './lib/utils';
 
 function App() {
     const settings = useSettings();
@@ -33,7 +35,7 @@ function App() {
     const [playerNotice, setPlayerNotice] = useState(''); // why the last pattern was not loaded
     const [showSettings, setShowSettings] = useState(false);
     const [showChats, setShowChats] = useState(false);
-    const [editingMessage, setEditingMessage] = useState({ index: null, content: '' });
+    const [editingMessage, setEditingMessage] = useState({ index: null, id: null, content: '' });
 
     const stopGenerating = () => abortRef.current?.abort();
 
@@ -75,13 +77,12 @@ function App() {
         return true;
     };
 
-    const stopEditing = () => setEditingMessage({ index: null, content: '' });
+    const stopEditing = () => setEditingMessage({ index: null, id: null, content: '' });
 
     const saveMessageEdit = () => {
         if (editingMessage.index === null) return;
-        const updated = [...chat.messages];
-        updated[editingMessage.index] = { ...updated[editingMessage.index], content: editingMessage.content };
-        chat.updateChat(chat.currentChatId, { messages: updated });
+        const { id, content } = editingMessage;
+        chat.updateChatWith(chat.currentChatId, (c) => updateMessage(c, id, { content }));
         stopEditing();
     };
 
@@ -94,10 +95,12 @@ function App() {
         }
 
         const chatId = chat.currentChatId;
-        const userMsg = { role: 'user', content: input };
-        // Optimistic update
+        const text = input;
+        const userMsg = { id: generateId(), role: 'user', content: text };
+        // Optimistic update. Every later write goes through updateChatWith, so it applies to the
+        // chat as it is then: edits and renames made during generation are kept.
         const updatedMessages = [...chat.messages, userMsg];
-        chat.updateChat(chatId, { messages: updatedMessages });
+        chat.updateChatWith(chatId, (c) => appendMessage(c, userMsg));
 
         setInput('');
         setIsLoading(true);
@@ -106,6 +109,7 @@ function App() {
         abortRef.current = controller;
 
         const reply = (result) => ({
+            id: generateId(),
             role: 'assistant',
             content: result.content || (result.status === 'error' ? `Error: ${result.error?.message}` : ''),
             code: result.code,
@@ -134,15 +138,10 @@ function App() {
                 return;
             }
 
-            // Name a new chat after its first message
-            let name = chat.currentChat.name;
-            if (chat.messages.length === 0 && (name === 'New Chat' || name.startsWith('Chat '))) {
-                name = input.slice(0, 30) + (input.length > 30 ? '...' : '');
-            }
-
             const message = reply(result);
             if (result.status === 'error' && !result.content) delete message.model; // a plain error line, as before
-            chat.updateChat(chatId, { messages: [...updatedMessages, message], name });
+            // Append the reply and name a new chat after its first message (unless the user renamed it meanwhile)
+            chat.updateChatWith(chatId, (c) => nameAfterFirstMessage(appendMessage(c, message), text));
 
             // Load the pattern into the player only when the reply completed and the code parses
             let load = 'none';
@@ -155,7 +154,7 @@ function App() {
         } catch (error) {
             // Only a programming error gets here: generateStrudelCode reports failures as a status
             setAnnouncement(`Error: ${error.message}`);
-            chat.updateChat(chatId, { messages: [...updatedMessages, { role: 'assistant', content: `Error: ${error.message}`, status: 'error' }] });
+            chat.updateChatWith(chatId, (c) => appendMessage(c, { id: generateId(), role: 'assistant', content: `Error: ${error.message}`, status: 'error' }));
         } finally {
             abortRef.current = null;
             setStreaming(null);
@@ -223,7 +222,7 @@ function App() {
                         onPickPrompt={pickPrompt}
                         editing={editingMessage}
                         onEditContentChange={(content) => setEditingMessage({ ...editingMessage, content })}
-                        onStartEdit={(index, content) => setEditingMessage({ index, content })}
+                        onStartEdit={(index, content) => setEditingMessage({ index, id: chat.messages[index]?.id, content })}
                         onCancelEdit={stopEditing}
                         onSaveEdit={saveMessageEdit}
                         onLoadCode={async (msg) => {

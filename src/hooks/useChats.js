@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { useEffect, useState } from 'react';
-import { CHATS_KEY, CURRENT_CHAT_KEY, createChat, loadInitialChats, removeChat, resetChats } from '../lib/chats';
+import { CHATS_KEY, CURRENT_CHAT_KEY, createChat, loadInitialChats, removeChat, resetChats, withMessageIds } from '../lib/chats';
 import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile } from '../lib/chatFile';
 import { downloadText } from '../lib/download';
 
@@ -22,6 +22,15 @@ export function useChats() {
 
     const updateChat = (id, patch) => {
         setChats(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
+    };
+
+    /**
+     * Change one chat from its current state: `fn` receives the chat as it is when the update
+     * runs, not as it was when a request started. Use this for every write that happens after an
+     * `await`. Does nothing if the chat has been deleted meanwhile.
+     */
+    const updateChatWith = (id, fn) => {
+        setChats(prev => prev.map(c => (c.id === id ? fn(c) : c)));
     };
 
     const createNewChat = () => {
@@ -63,6 +72,7 @@ export function useChats() {
                 throw new ChatFileError(`This file is too large to import (limit ${MAX_CHAT_FILE_BYTES / 1024 / 1024} MB).`);
             }
             const result = parseChatFile(await file.text());
+            result.chats = result.chats.map(c => withMessageIds(c));
             setChats(prev => [...result.chats, ...prev]);
             setCurrentChatId(result.chats[0].id);
             onImported?.();
@@ -82,6 +92,7 @@ export function useChats() {
         messages: currentChat ? currentChat.messages : [],
         selectChat: setCurrentChatId,
         updateChat,
+        updateChatWith,
         createNewChat,
         renameChat: (id, name) => updateChat(id, { name }),
         deleteChat,

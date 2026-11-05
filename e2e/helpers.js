@@ -66,3 +66,18 @@ export async function seedStorage(page, entries) {
         for (const [key, value] of Object.entries(data)) localStorage.setItem(key, value);
     }, [entries]);
 }
+
+/**
+ * Make the mocked model answer after `ms` milliseconds (register after mockNetwork; later routes win).
+ * @returns {{ requests: number }} counts the chat requests
+ */
+export async function delayedReply(page, reply, { ms = 1500, model = 'mock-model', finishReason = 'stop' } = {}) {
+    const counter = { requests: 0 };
+    await page.route('https://openrouter.ai/api/v1/chat/completions', async (route) => {
+        counter.requests++;
+        await new Promise((resolve) => setTimeout(resolve, ms));
+        // the page may have aborted the request meanwhile
+        await route.fulfill({ contentType: 'text/event-stream', headers: { 'access-control-allow-origin': '*' }, body: sseBody(reply, model, finishReason) }).catch(() => {});
+    });
+    return counter;
+}
