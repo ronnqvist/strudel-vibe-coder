@@ -170,14 +170,18 @@ function App() {
         if (await sendText(text)) setInput('');
     };
 
+    /** Ask for a key when there is none. Returns whether there is one. */
+    const haveKey = () => {
+        if (settings.effectiveApiKey) return true;
+        alert("Please enter your OpenRouter API Key in settings.");
+        setShowSettings(true);
+        return false;
+    };
+
     /** Send `text` as the user's next message in the chat being viewed. Returns whether it was sent. */
     const sendText = async (text) => {
-        if (isLoading) return false;
-        if (!settings.effectiveApiKey) {
-            alert("Please enter your OpenRouter API Key in settings.");
-            setShowSettings(true);
-            return false;
-        }
+        if (isLoading || requests.isRunning(currentChatId)) return false;
+        if (!haveKey()) return false;
         const chatId = currentChatId;
         const userMsg = { id: generateId(), role: 'user', content: text };
         chat.updateChatWith(chatId, (c) => appendMessage(c, userMsg));
@@ -187,7 +191,7 @@ function App() {
 
     // Ask again after a reply that did not complete (the failed reply stays, and is not sent back)
     const retry = async () => {
-        if (isLoading || !settings.effectiveApiKey) return;
+        if (isLoading || requests.isRunning(currentChatId) || !haveKey()) return;
         await runRequest(currentChatId, chat.messages);
     };
 
@@ -212,6 +216,7 @@ function App() {
 
     /** "Fix an error": the user pasted an error the player showed; ask the model to fix the pattern on stage. */
     const fixError = async (text) => {
+        if (isLoading || requests.isRunning(currentChatId)) return 'A reply is still being written in this chat. Try again when it has finished.';
         setPasteDialog(null);
         await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
         return null;
