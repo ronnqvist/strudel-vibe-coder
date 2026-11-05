@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { MAX_URL_LENGTH, normalizeTypography, shortHash, strudelUrl } from '../lib/strudelUrl';
 
 /**
@@ -10,10 +10,13 @@ import { MAX_URL_LENGTH, normalizeTypography, shortHash, strudelUrl } from '../l
  * - `referrerPolicy="no-referrer"`: strudel.cc does not need to know which page embeds it.
  * - `loading="eager"`: the player is the main panel and is visible immediately.
  * - The iframe is keyed by a short hash of the code, so new code remounts the REPL.
+ * - Keyboard: the iframe is left out of the Tab order, because the strudel.cc editor keeps the
+ *   Tab key once it has focus. An "Enter player" button (visible when focused) moves focus into it.
  */
 const StrudelFrame = ({ code }) => {
     const src = strudelUrl(code);
     const [copied, setCopied] = useState(false);
+    const frameRef = useRef(null);
 
     if (src.length > MAX_URL_LENGTH) {
         const copy = async () => {
@@ -45,8 +48,16 @@ const StrudelFrame = ({ code }) => {
 
     return (
         <div className="w-full h-full bg-cyber-black border-t border-cyber-gray relative">
+            <button
+                onClick={() => frameRef.current?.focus()}
+                className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-10 focus:px-3 focus:py-2 focus:rounded focus:bg-cyber-neon focus:text-black focus:font-bold"
+            >
+                Enter player
+            </button>
             <iframe
+                ref={frameRef}
                 key={shortHash(src)}
+                tabIndex={-1}
                 src={src}
                 title="Strudel live-coding REPL (strudel.cc)"
                 loading="eager"

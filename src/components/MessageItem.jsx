@@ -41,6 +41,7 @@ const MessageItem = ({
                                     <span className="font-bold">Generated Code</span>
                                     {message.model && <span className="text-[10px] text-gray-400 ml-2 border border-gray-700 px-1 rounded">{message.model}</span>}
                                     {message.stopped && <span className="text-[10px] text-red-400 border border-red-900 px-1 rounded">stopped</span>}
+                                    {message.truncated && <span className="text-[10px] text-yellow-300 border border-yellow-800 px-1 rounded" title="The model stopped at its length limit; the code may be incomplete">cut off</span>}
                                 </div>
                                 {!readOnly && <div className="flex gap-1">
                                     <button

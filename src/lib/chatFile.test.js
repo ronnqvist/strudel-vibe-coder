@@ -76,11 +76,11 @@ describe('parseChatFile: cleaning', () => {
     it('keeps only the fields the app knows, in messages and chats', () => {
         const dirty = {
             id: 'x', name: 'n', createdAt: '2025-01-01T00:00:00.000Z', evil: '<script>', __proto__x: 1,
-            messages: [{ role: 'user', content: 'hi', onclick: 'alert(1)', html: '<b>' }, { role: 'assistant', content: 'yo', stopped: true, model: 'M', code: 'c' }],
+            messages: [{ role: 'user', content: 'hi', onclick: 'alert(1)', html: '<b>' }, { role: 'assistant', content: 'yo', stopped: true, truncated: true, model: 'M', code: 'c' }],
         };
         const { chats } = parseChatFile(JSON.stringify(dirty), opts());
         expect(Object.keys(chats[0]).sort()).toEqual(['createdAt', 'id', 'messages', 'name']);
-        expect(chats[0].messages).toEqual([{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'yo', code: 'c', model: 'M', stopped: true }]);
+        expect(chats[0].messages).toEqual([{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'yo', code: 'c', model: 'M', stopped: true, truncated: true }]);
     });
 
     it('skips and counts messages with an unknown role or non-text content', () => {
