@@ -9,7 +9,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores(['dist']),
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['**/*.{js,jsx,mjs}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -30,7 +30,7 @@ export default defineConfig([
   },
   {
     // Tests and tool configuration run in Node, not in the browser
-    files: ['e2e/**/*.js', 'playwright.config.js', 'scripts/**/*.js'],
+    files: ['e2e/**/*.js', 'playwright.config.js', 'scripts/**/*.{js,mjs}', 'eval/**/*.{js,mjs}'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
 ])

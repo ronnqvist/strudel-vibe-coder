@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Describe music in plain language and get live-coded Strudel patterns, played in strudel.cc.",
   "license": "MIT",
-  "author": "Simon Rönnqvist <simon@iki.fi>",
+  "author": "Simon R\u00f6nnqvist <simon@iki.fi>",
   "homepage": "https://ronnqvist.github.io/strudel-vibe-coder/",
   "repository": {
     "type": "git",
@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "licenses": "node scripts/check-licenses.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "eval:mock": "node --import ./eval/register.mjs eval/run.mjs --provider mock --runs 3"
   },
   "dependencies": {
     "acorn": "^8.19.0",
