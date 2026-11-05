@@ -29,7 +29,7 @@ Strudel is a JavaScript-based implementation of TidalCycles for live coding musi
 - ❌ NO setInterval, setTimeout, or other timing functions
 - ❌ NO nested function calls like s("piano", note("c e g"))
 - ❌ NO imperative array manipulation for sequences
-- ❌ NO undocumented methods: STRICTLY do NOT use any JavaScript methods, functions, or APIs that are not explicitly mentioned in this documentation. If it's not here, it likely doesn't exist in the Strudel REPL environment.
+- ❌ NO invented functions: prefer the functions described here. Other functions documented in the Strudel reference are fine, but never guess a function name, and never use browser or Node APIs (DOM, fetch, timers).
 
 ## ⚠️ COMMON ERRORS TO AVOID - READ CAREFULLY:
 - ⚠️ "Error: got undefined instead of pattern": This is the #1 error. It happens when:
@@ -96,7 +96,7 @@ Mini-notation is Strudel's pattern language. Use it inside strings with s(), not
 
 ## Randomness
 - ? - 50% chance of playing
-- ?0.3 - 30% chance of playing
+- ?0.3 - 30% chance of being removed (the event plays about 70% of the time)
 - "bd*8?" - randomly skip some kicks
 - | - random choice: "bd|sd|cp" picks one randomly
 
@@ -116,7 +116,7 @@ Mini-notation is Strudel's pattern language. Use it inside strings with s(), not
 ## Pattern Creation
 - s("bd sd hh") - play samples by name
 - note("c e g") - play notes (letter notation)
-- n("0 2 4") - play notes (numeric, semitones from root)
+- n("0 2 4") - numbers: with .scale("C:minor") they are scale degrees counted from 0; without a scale they choose the sample number of a sound
 - sound("piano") or .s("piano") - select sound/instrument
 
 ## Method Chaining Order
@@ -131,7 +131,7 @@ Example: note("c e g").s("sawtooth").lpf(800).fast(2)
 - stack(pattern1, pattern2, ...) - layer patterns (play simultaneously)
 - cat(pattern1, pattern2, ...) - concatenate (play sequentially)
 - seq(pattern1, pattern2, ...) - sequence patterns
-- silence() - create silence
+- silence - a pattern that plays nothing (a constant: write silence, not silence())
 - run(n) - ascending sequence 0 to n-1
 
 Example:
@@ -140,6 +140,14 @@ stack(
   s("hh*8"),
   note("c eb g").s("sawtooth")
 )
+
+# Scales, Chords and Signals
+
+- n("0 2 4 7").scale("C:minor") - notes from a scale (degrees counted from 0); patterned scales work too: .scale("<C:minor F:dorian>")
+- chord("<C Am F G>").voicing() - chord symbols turned into playable voicings
+- sine, saw, tri, square, perlin, rand - continuous signals between 0 and 1; .range(low, high) rescales them, for example .lpf(sine.range(400, 4000).slow(4))
+- .segment(n) - samples a continuous signal n times per cycle, for example n(rand.range(0, 7).segment(8)).scale("C:minor")
+- .degradeBy(0.3) - removes about 30% of the events at random
 
 # Time Modifiers (Essential for Variation)
 
@@ -196,8 +204,8 @@ These names do NOT exist and fail with "sound ... not found": ch, kick, tom, sna
 - .fmsustain(n) - FM envelope sustain
 
 ## Vibrato
-- .vib(n) - vibrato amount
-- .vibmod(n) - vibrato modulation
+- .vib(hz) - vibrato rate in Hz, for example .vib(4); .vib("4:0.5") sets rate and depth together
+- .vibmod(semitones) - vibrato depth in semitones; it only works when .vib() is also set
 
 # Audio Effects (Comprehensive)
 
@@ -205,8 +213,8 @@ These names do NOT exist and fail with "sound ... not found": ch, kick, tom, sna
 - .lpf(freq) - lowpass filter (20-20000 Hz)
 - .hpf(freq) - highpass filter
 - .bpf(freq) - bandpass filter
-- .lpq(resonance) - lowpass resonance (0-30)
-- .hpq(resonance) - highpass resonance
+- .lpq(resonance) - lowpass resonance (0-50)
+- .hpq(resonance) - highpass resonance (0-50)
 - .bpq(resonance) - bandpass resonance
 - .vowel("a"|"e"|"i"|"o"|"u") - vowel filter
 
@@ -219,7 +227,7 @@ These names do NOT exist and fail with "sound ... not found": ch, kick, tom, sna
 
 ## Dynamics
 - .gain(level) - volume (0-1, can go higher)
-- .velocity(level) - MIDI-style velocity
+- .velocity(level) - velocity from 0 to 1, multiplied with gain
 - .compressor("threshold:ratio:knee:attack:release") - dynamics compressor, for example .compressor("-20:20:10:.002:.02")
 - (.compress(start, end) is NOT dynamics compression: it squeezes the events into part of each cycle)
 
@@ -229,15 +237,17 @@ These names do NOT exist and fail with "sound ... not found": ch, kick, tom, sna
 - .juxBy(amount, fn) - partial stereo separation
 
 ## Waveshaping/Distortion
-- .distort(amount) - distortion (0-1)
+- .distort(amount) - waveshaping distortion; useful values are roughly 0-10 and it gets loud fast. .distort("3:0.5") also lowers the output level (amount:postgain)
 - .crush(bits) - bitcrusher (1-16)
 - .coarse(factor) - sample rate reduction
 
-## Global Effects (Applied to Entire Mix)
-- .delay(time) - delay time (0-1)
-- .delayfeedback(amount) - delay feedback (0-1)
-- .room(size) - reverb amount (0-1)
-- .roomsize(size) - reverb room size (0-1)
+## Delay and Reverb (Shared per Orbit)
+Patterns on the same orbit (the default is 1) share one delay and one reverb, so the last setting wins. Give patterns that need different delay or reverb settings their own orbit: .orbit(2).
+- .delay(level) - how loud the echoes are (0-1)
+- .delaytime(seconds) - time between echoes in seconds, for example .delaytime(0.25)
+- .delayfeedback(amount) - how much each echo feeds the next (0-1; 1 or more keeps getting louder)
+- .room(level) - how much reverb (0-1)
+- .roomsize(size) - size of the reverb room (0-10); changing it recalculates the reverb, so change it rarely
 - .phaser(speed) - phaser effect
 - .phaserdepth(amount) - phaser depth
 
@@ -251,7 +261,7 @@ These names do NOT exist and fail with "sound ... not found": ch, kick, tom, sna
 - .loopEnd(point) - loop end point
 - .chop(n) - chop into n slices
 - .slice(n, pattern) - slice and rearrange
-- .splice(n, pattern) - slice with time-stretching
+- .splice(n, pattern) - like slice, but changes each slice's speed (and therefore its pitch) to fit its step
 - .fit() - fit sample to event duration
 
 # Hydra Visual Integration
@@ -269,7 +279,7 @@ Example:
 await initHydra()
 let pattern = "3 4 5 [6 7]*2"
 shape(H(pattern)).out(o0)
-note(pattern).s("piano")
+n(pattern).scale("A:minor").s("piano")
 
 ## Common Hydra Functions
 - osc(freq, sync, offset) - oscillator

@@ -70,3 +70,56 @@ describe('system prompt: behaviour the app relies on', () => {
         expect(SYSTEM_PROMPT).not.toMatch(/\$\{/);
     });
 });
+
+/**
+ * #8: API facts checked against the Strudel documentation on 2026-11-05.
+ * Each row: what the prompt must say (or must not say), and the page that backs it.
+ * Wording in the prompt is our own; nothing is copied from the documentation.
+ *
+ * Also checked on 2026-11-05 in the real strudel.cc REPL (headless Chromium, Playwright: code
+ * opened through the URL fragment, then Play): an example of every corrected fact (delay/delaytime/
+ * delayfeedback and "level:time:feedback", room/roomsize(5), vib/vibmod and "rate:depth", silence
+ * in a stack, ?0.3, n + scale, a patterned scale, chord().voicing(), sine.range().slow(),
+ * rand.range().segment() + scale, degradeBy, distort("3:0.5"), lpq(40), velocity, two orbits, the
+ * corrected Hydra example) and the app's starter pattern evaluated and were scheduled with no
+ * error. Controls: silence() fails with "silence is not a function", and s("kick") reports
+ * "sound kick not found", so the check does detect errors. Not checked: what it sounds like
+ * (headless, no listening).
+ */
+const FACTS = [
+    { fact: 'delay is the level of the echoes; delaytime is the time in seconds', must: [/\.delay\(level\) - how loud the echoes are/, /\.delaytime\(seconds\) - time between echoes in seconds/], mustNot: [/\.delay\(time\)/], doc: 'https://strudel.cc/learn/effects/#delay' },
+    { fact: 'delayfeedback of 1 or more keeps growing', must: [/1 or more keeps getting louder/], doc: 'https://strudel.cc/learn/effects/#delayfeedback' },
+    { fact: 'roomsize ranges 0-10 and recalculates the reverb', must: [/\.roomsize\(size\) - size of the reverb room \(0-10\)/], mustNot: [/roomsize\(size\) - reverb room size \(0-1\)/], doc: 'https://strudel.cc/learn/effects/#roomsize' },
+    { fact: 'room is the reverb level', must: [/\.room\(level\) - how much reverb/], doc: 'https://strudel.cc/learn/effects/#room' },
+    { fact: 'delay and reverb are shared per orbit', must: [/share one delay and one reverb/, /\.orbit\(2\)/], mustNot: [/Applied to Entire Mix/], doc: 'https://strudel.cc/learn/effects/#orbits' },
+    { fact: 'vib is the vibrato rate in Hz', must: [/\.vib\(hz\) - vibrato rate in Hz/], mustNot: [/\.vib\(n\) - vibrato amount/], doc: 'https://strudel.cc/learn/synths/#vibrato' },
+    { fact: 'vibmod is the depth in semitones and needs vib', must: [/\.vibmod\(semitones\) - vibrato depth in semitones; it only works when \.vib\(\) is also set/], doc: 'https://strudel.cc/learn/synths/#vibmod' },
+    { fact: 'silence is a constant, not a function', must: [/silence - a pattern that plays nothing/], mustNot: [/silence\(\) - /], doc: 'https://strudel.cc/learn/factories/#silence' },
+    { fact: 'the number after ? is the chance of removal', must: [/\?0\.3 - 30% chance of being removed/], mustNot: [/30% chance of playing/], doc: 'https://strudel.cc/learn/mini-notation/' },
+    { fact: 'n() picks scale degrees with .scale(), sample numbers without', must: [/scale degrees counted from 0/], mustNot: [/semitones from root/], doc: 'https://strudel.cc/learn/tonal/' },
+    { fact: 'lpq ranges 0-50', must: [/\.lpq\(resonance\) - lowpass resonance \(0-50\)/], mustNot: [/\(0-30\)/], doc: 'https://strudel.cc/learn/effects/#lpq' },
+    { fact: 'distort is useful up to about 10', must: [/useful values are roughly 0-10/], mustNot: [/distortion \(0-1\)/], doc: 'https://strudel.cc/learn/effects/#distort' },
+    { fact: 'velocity is 0-1 and multiplies gain', must: [/velocity from 0 to 1, multiplied with gain/], mustNot: [/MIDI-style velocity/], doc: 'https://strudel.cc/learn/effects/#velocity' },
+    { fact: 'splice changes speed, so pitch', must: [/changes each slice's speed \(and therefore its pitch\)/], mustNot: [/time-stretching/], doc: 'https://strudel.cc/learn/samples/' },
+    { fact: 'scale, chord and voicing are documented and allowed', must: [/\.scale\("C:minor"\)/, /chord\("<C Am F G>"\)\.voicing\(\)/], mustNot: [/STRICTLY do NOT use any JavaScript methods, functions, or APIs that are not explicitly mentioned/], doc: 'https://strudel.cc/learn/tonal/' },
+    { fact: 'signals with range and segment', must: [/\.range\(low, high\)/, /\.segment\(n\)/], doc: 'https://strudel.cc/learn/signals/' },
+    { fact: 'the Hydra example plays audible notes', must: [/n\(pattern\)\.scale\("A:minor"\)\.s\("piano"\)/], mustNot: [/note\(pattern\)\.s\("piano"\)/], doc: 'https://strudel.cc/learn/hydra/' },
+];
+
+describe('system prompt: Strudel API facts (#8)', () => {
+    for (const { fact, must = [], mustNot = [], doc } of FACTS) {
+        it(`${fact} (${doc})`, () => {
+            for (const re of must) expect(SYSTEM_PROMPT).toMatch(re);
+            for (const re of mustNot) expect(SYSTEM_PROMPT).not.toMatch(re);
+        });
+    }
+
+    it('never calls silence as a function, except to say not to', () => {
+        const calls = [...SYSTEM_PROMPT.matchAll(/silence\(\)/g)].map(m => SYSTEM_PROMPT.slice(Math.max(0, m.index - 4), m.index));
+        expect(calls).toEqual(['not ']);
+    });
+
+    it('every example that sets .delay() in a chain is described as a level, never as a time', () => {
+        for (const m of SYSTEM_PROMPT.matchAll(/\.delay\(([^)]*)\)\s*-\s*([^\n]*)/g)) expect(m[2]).not.toMatch(/time/i);
+    });
+});
