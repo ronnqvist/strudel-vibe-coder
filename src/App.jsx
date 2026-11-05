@@ -8,6 +8,7 @@ import ChatInput from './components/ChatInput';
 import PlayerPanel from './components/PlayerPanel';
 import MobileTabs from './components/MobileTabs';
 import PasteDialog from './components/PasteDialog';
+import CustomInstructions from './components/CustomInstructions';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
 import { preparePattern } from './lib/patternCheck';
@@ -136,6 +137,7 @@ function App() {
             const systemPrompt = composeSystemPrompt({
                 modules: selectModules({ userText, selectedCode: stagePattern, prefs: settings.promptPrefs }),
                 prefs: settings.promptPrefs,
+                customInstructions: settings.customInstructions,
             });
 
             const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
@@ -295,6 +297,7 @@ function App() {
                         catalog={catalog}
                         promptPrefs={settings.promptPrefs}
                         onPromptPrefsChange={settings.setPromptPrefs}
+                        musicExtras={<CustomInstructions value={settings.customInstructions} onChange={settings.setCustomInstructions} />}
                         onClose={() => setShowSettings(false)}
                     />
                 )}

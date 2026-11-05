@@ -527,3 +527,26 @@ test.describe('the system prompt is composed per request (#8)', () => {
         expect(saved.filter(m => m.role === 'assistant').every(m => m.promptVersion === '2.0.0')).toBe(true);
     });
 });
+
+test('custom music instructions are added to the prompt, and can be reset, exported and imported', async ({ page }) => {
+    const { chatRequests } = await mockNetwork(page);
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+    await page.goto('./');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Configuration' });
+    await dialog.getByText('Advanced: your own music instructions').click();
+    await dialog.getByLabel('Your own music instructions').fill('Prefer minor keys and slow tempos.');
+    const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Export' }).click()]);
+    expect(download.suggestedFilename()).toBe('strudel-music-instructions.txt');
+    await dialog.getByRole('button', { name: 'Reset' }).click();
+    await expect(dialog.getByLabel('Your own music instructions')).toHaveValue('');
+    await dialog.locator('input[type=file][accept=".txt,text/plain"]').setInputFiles({ name: 'mine.txt', mimeType: 'text/plain', buffer: Buffer.from('Prefer minor keys and slow tempos.') });
+    await expect(dialog.getByLabel('Your own music instructions')).toHaveValue('Prefer minor keys and slow tempos.');
+    await page.keyboard.press('Escape');
+
+    await page.getByLabel('Message', { exact: true }).fill('x');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status')).toHaveText(/Reply received/);
+    const system = chatRequests[0].body.messages[0].content;
+    expect(system.endsWith("# The User's Own Music Instructions\nFollow these where they do not conflict with the output contract and the Strudel facts above:\nPrefer minor keys and slow tempos.")).toBe(true);
+});

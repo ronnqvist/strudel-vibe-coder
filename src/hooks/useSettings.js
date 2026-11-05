@@ -5,9 +5,10 @@ import { DEFAULT_MODEL_ID } from '../config';
 import { migrateBookmarks } from '../lib/models';
 import { loadApiKey, persistApiKey, persistRemember, readRemember } from '../lib/keyStorage';
 import { urlKey } from '../lib/urlKey';
-import { DEFAULT_PREFS, cleanPrefs } from '../lib/prompt';
+import { DEFAULT_PREFS, MAX_CUSTOM_INSTRUCTIONS, cleanPrefs } from '../lib/prompt';
 
 export const PROMPT_PREFS_KEY = 'openrouter_prompt_prefs';
+export const CUSTOM_INSTRUCTIONS_KEY = 'openrouter_custom_instructions';
 
 /**
  * API key, active model and model bookmarks.
@@ -23,6 +24,7 @@ export function useSettings() {
     // Musical preferences for the prompt (visuals, explanation level); unknown values fall back to the defaults
     const [storedPrefs, setStoredPrefs] = useLocalStorage(PROMPT_PREFS_KEY, DEFAULT_PREFS, { json: true });
     const promptPrefs = cleanPrefs(storedPrefs);
+    const [customInstructions, setCustomInstructions] = useLocalStorage(CUSTOM_INSTRUCTIONS_KEY, '');
     // Bookmarks are brought up to date once, at startup (see migrateBookmarks), then saved as usual.
     const [savedModels, setSavedModels] = useState(() =>
         migrateBookmarks(
@@ -66,6 +68,8 @@ export function useSettings() {
         savedModels,
         setSavedModels,
         promptPrefs,
+        customInstructions: typeof customInstructions === 'string' ? customInstructions.slice(0, MAX_CUSTOM_INSTRUCTIONS) : '',
+        setCustomInstructions: (text) => setCustomInstructions(String(text ?? '').slice(0, MAX_CUSTOM_INSTRUCTIONS)),
         setPromptPrefs: (patch) => setStoredPrefs(prev => cleanPrefs({ ...cleanPrefs(prev), ...patch })),
         modelName: savedModels.find(m => m.id === model)?.name || model,
     };
