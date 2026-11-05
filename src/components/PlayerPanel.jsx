@@ -8,7 +8,9 @@ import StrudelFrame from './StrudelFrame';
  * On narrow screens it is shown only on the "Stage" tab. It is hidden with CSS, never unmounted,
  * so music keeps playing while the chat is in front.
  */
-const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestorePrevious, onRestorePrevious, hasMessagesWithCode, onUseLatestReply }) => (
+const toolButton = 'px-3 py-1 rounded text-sm bg-cyber-gray text-cyber-cyan hover:bg-cyber-neon hover:text-black';
+
+const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestorePrevious, onRestorePrevious, hasMessagesWithCode, onUseLatestReply, onUseEditedCode, onFixError }) => (
     <div
         id="stage-panel"
         className={`${visibleOnMobile ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 md:flex-none w-full md:w-1/2 md:h-full bg-black flex-col`}
@@ -19,13 +21,6 @@ const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestor
                 <button onClick={onDismissNotice} className="shrink-0 underline hover:text-white">Dismiss</button>
             </div>
         )}
-        {canRestorePrevious && (
-            <div className="flex justify-start gap-2 px-2 pt-1 shrink-0 bg-cyber-black">
-                <button onClick={onRestorePrevious} className="px-3 py-1 rounded text-sm bg-cyber-gray text-cyber-cyan hover:bg-cyber-neon hover:text-black">
-                    Restore previous
-                </button>
-            </div>
-        )}
         {!code && hasMessagesWithCode && (
             <div className="flex items-center gap-3 px-4 py-2 text-sm text-gray-300 bg-cyber-black border-b border-cyber-gray shrink-0">
                 <p className="flex-1">No pattern of this chat is in the player yet.</p>
@@ -34,8 +29,20 @@ const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestor
                 </button>
             </div>
         )}
+        <p className="px-3 pt-1 text-xs text-gray-400 bg-cyber-black shrink-0">
+            Changes you make in the player stay in the player. To continue from them here, use “Use edited code”.
+        </p>
         <div className="flex-1 min-h-0">
-            <StrudelFrame code={code} />
+            <StrudelFrame
+                code={code}
+                actions={(
+                    <>
+                        {canRestorePrevious && <button onClick={onRestorePrevious} className={toolButton}>Restore previous</button>}
+                        <button onClick={onUseEditedCode} className={toolButton} title="Edits made in the player are not sent back to this app. Paste them here to keep them.">Use edited code</button>
+                        {code && <button onClick={onFixError} className={toolButton} title="Paste an error shown by the player and ask the model to fix the pattern">Fix an error</button>}
+                    </>
+                )}
+            />
         </div>
     </div>
 );

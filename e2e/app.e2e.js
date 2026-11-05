@@ -224,7 +224,7 @@ test('a reply cut off at the length limit is marked and not loaded, even when it
     expect(await page.locator('iframe').getAttribute('src')).toBe(before);
 });
 
-test('"Enter player" is a visible link that opens the current pattern on strudel.cc; the iframe is not a Tab trap', async ({ page, context }) => {
+test('"Open in Strudel" is a visible link that opens the current pattern on strudel.cc; the iframe is not a Tab trap', async ({ page, context }) => {
     await mockNetwork(page);
     await seedStorage(page, { openrouter_current_code: '$: s("bd*4")' });
     await page.goto('./');
@@ -233,7 +233,7 @@ test('"Enter player" is a visible link that opens the current pattern on strudel
     await expect(frame).toHaveAttribute('title', 'Strudel live-coding REPL (strudel.cc)');
 
     // visible without any keyboard use, and a link
-    const enter = page.getByRole('link', { name: 'Enter player (opens in a new tab)' });
+    const enter = page.getByRole('link', { name: 'Open in Strudel (opens in a new tab)' });
     await expect(enter).toBeVisible();
     await expect(enter).toHaveAttribute('target', '_blank');
     const href = await enter.getAttribute('href');
@@ -254,7 +254,7 @@ test('"Enter player" is a visible link that opens the current pattern on strudel
         await page.keyboard.press('Tab');
         seen.push(await page.evaluate(() => document.activeElement?.tagName + ':' + (document.activeElement?.textContent || '').trim().slice(0, 30)));
     }
-    expect(seen.some(s => s.startsWith('A:Enter player'))).toBe(true);
+    expect(seen.some(s => s.startsWith('A:Open in Strudel'))).toBe(true);
     expect(seen.some(s => s.startsWith('IFRAME'))).toBe(false);
     expect(new Set(seen).size).toBeGreaterThan(3);
 });
@@ -404,4 +404,44 @@ test.describe('each chat has its own pattern (#7)', () => {
         const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
         expect(saved.find(c => c.id === 'a').messages[0].content).toBe('make it slower');
     });
+});
+
+test('"Use edited code" makes pasted code the chat\'s pattern; invalid code is refused', async ({ page }) => {
+    const { chatRequests } = await mockNetwork(page);
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_current_code: '$: s("hh*8")' });
+    await page.goto('./');
+    await expect(page.getByText('Changes you make in the player stay in the player.')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Use edited code' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Use edited code' });
+    await dialog.getByLabel('Code from the player').fill('s("bd"');
+    await dialog.getByRole('button', { name: 'Use this code' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('syntax error');
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('$: s("hh*8")');
+
+    await dialog.getByLabel('Code from the player').fill('$: s("hh*8").gain(0.5) // edited in Strudel');
+    await dialog.getByRole('button', { name: 'Use this code' }).click();
+    await expect(dialog).toBeHidden();
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('$: s("hh*8").gain(0.5) // edited in Strudel');
+
+    // the next request is about the edited code
+    await page.getByLabel('Message', { exact: true }).fill('faster');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status')).toHaveText(/Reply received/);
+    expect(chatRequests[0].body.messages.at(-1).content).toContain('// edited in Strudel');
+});
+
+test('"Fix an error" sends the pasted error with the pattern on stage', async ({ page }) => {
+    const { chatRequests } = await mockNetwork(page);
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_current_code: '$: s("hh*8").foo()' });
+    await page.goto('./');
+    await page.getByRole('button', { name: 'Fix an error' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Fix an error' });
+    await dialog.getByLabel('Error message').fill('TypeError: s(...).foo is not a function');
+    await dialog.getByRole('button', { name: 'Ask for a fix' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('status')).toHaveText(/Reply received/);
+    const sent = chatRequests[0].body.messages.at(-1).content;
+    expect(sent).toContain('$: s("hh*8").foo()');
+    expect(sent).toContain('TypeError: s(...).foo is not a function');
 });

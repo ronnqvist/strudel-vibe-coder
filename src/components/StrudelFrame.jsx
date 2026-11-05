@@ -10,13 +10,15 @@ import { MAX_URL_LENGTH, shortHash, strudelUrl } from '../lib/strudelUrl';
  * - `referrerPolicy="no-referrer"`: strudel.cc does not need to know which page embeds it.
  * - `loading="eager"`: the player is the main panel and is visible immediately.
  * - The iframe is keyed by a short hash of the code, so new code remounts the REPL.
+ * - Edits made inside the iframe stay there: the app cannot read a cross-origin frame, and does
+ *   not try to. The player panel offers "Use edited code" to paste them back.
  * - Keyboard: the iframe is left out of the Tab order, because the strudel.cc editor keeps the
- *   Tab key once it has focus. Above it, an always-visible "Enter player" link opens the same
+ *   Tab key once it has focus. Above it, an always-visible "Open in Strudel" link opens the same
  *   pattern on strudel.cc in a new tab. A parent page cannot move focus into the cross-origin
  *   editor or press the embedded REPL's play overlay, so the link is the way in for keyboard
  *   and mouse users alike. The iframe stays on the page.
  */
-const StrudelFrame = ({ code }) => {
+const StrudelFrame = ({ code, actions = null }) => {
     const src = strudelUrl(code);
     const [copied, setCopied] = useState(false);
 
@@ -50,14 +52,15 @@ const StrudelFrame = ({ code }) => {
 
     return (
         <div className="w-full h-full min-h-0 flex flex-col bg-cyber-black border-t border-cyber-gray">
-            <div className="flex justify-end px-2 py-1 shrink-0">
+            <div className="flex flex-wrap items-center justify-end gap-2 px-2 py-1 shrink-0">
+                {actions}
                 <a
                     href={src}
                     target="_blank"
                     rel="noreferrer"
                     className="px-3 py-1 rounded text-sm bg-cyber-gray text-cyber-cyan hover:bg-cyber-neon hover:text-black"
                 >
-                    Enter player<span className="sr-only"> (opens in a new tab)</span>
+                    Open in Strudel<span className="sr-only"> (opens in a new tab)</span>
                 </a>
             </div>
             <iframe

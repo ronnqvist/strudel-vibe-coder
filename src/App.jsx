@@ -7,6 +7,7 @@ import MessageList from './components/MessageList';
 import ChatInput from './components/ChatInput';
 import PlayerPanel from './components/PlayerPanel';
 import MobileTabs from './components/MobileTabs';
+import PasteDialog from './components/PasteDialog';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
 import { preparePattern } from './lib/patternCheck';
@@ -33,6 +34,7 @@ function App() {
     const [news, setNews] = useState(() => new Set()); // chats whose stage changed since it was last seen
     const [showSettings, setShowSettings] = useState(false);
     const [showChats, setShowChats] = useState(false);
+    const [pasteDialog, setPasteDialog] = useState(null); // 'code' | 'error' | null
     const [editingMessage, setEditingMessage] = useState({ index: null, id: null, content: '' });
 
     const currentChatId = chat.currentChatId;
@@ -165,17 +167,23 @@ function App() {
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
+        const text = input;
+        if (await sendText(text)) setInput('');
+    };
+
+    /** Send `text` as the user's next message in the chat being viewed. Returns whether it was sent. */
+    const sendText = async (text) => {
+        if (isLoading) return false;
         if (!settings.effectiveApiKey) {
             alert("Please enter your OpenRouter API Key in settings.");
             setShowSettings(true);
-            return;
+            return false;
         }
         const chatId = currentChatId;
-        const text = input;
         const userMsg = { id: generateId(), role: 'user', content: text };
         chat.updateChatWith(chatId, (c) => appendMessage(c, userMsg));
-        setInput('');
-        await runRequest(chatId, [...chat.messages, userMsg], { firstMessageText: text });
+        runRequest(chatId, [...chat.messages, userMsg], { firstMessageText: text });
+        return true;
     };
 
     // Ask again after a reply that did not complete (the failed reply stays, and is not sent back)
@@ -190,6 +198,24 @@ function App() {
         if (!code) return;
         const loaded = await loadIntoStage(currentChatId, code, { origin: 'message', messageId: msg.id, model: msg.model });
         setAnnouncement(loaded ? 'The pattern was loaded into the player.' : 'The pattern has a syntax error and was not loaded.');
+    };
+
+    /** "Use edited code": the user pasted code from the Strudel editor; it becomes this chat's pattern. */
+    const applyEditedCode = async (text) => {
+        const chatId = currentChatId;
+        const prepared = await preparePattern(text.trim());
+        if (!prepared.ok) return `This code has a syntax error (${prepared.error}), so it was not loaded.`;
+        chat.updateChatWith(chatId, (c) => addRevision(c, { code: prepared.code, origin: 'edited', repaired: prepared.repaired }).chat);
+        setNotice(chatId, prepared.repaired ? 'Loaded with typographic quotes and dashes in the code replaced by plain ones, so that it runs.' : '');
+        setAnnouncement('Your edited code is now the pattern in the player.');
+        return null;
+    };
+
+    /** "Fix an error": the user pasted an error the player showed; ask the model to fix the pattern on stage. */
+    const fixError = async (text) => {
+        setPasteDialog(null);
+        await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
+        return null;
     };
 
     const restorePreviousVersion = () => {
@@ -294,7 +320,30 @@ function App() {
                         const latest = [...chat.messages].reverse().find(m => m.role === 'assistant' && messageStatus(m) === 'completed' && codeFromMessage(m));
                         if (latest) loadMessageVersion(latest);
                     }}
+                    onUseEditedCode={() => setPasteDialog('code')}
+                    onFixError={() => setPasteDialog('error')}
                 />
+
+                {pasteDialog === 'code' && (
+                    <PasteDialog
+                        title="Use edited code"
+                        explanation="The player (strudel.cc) does not send your edits back to this app. In the player, select all of the code (Ctrl+A or Cmd+A), copy it, and paste it here. It becomes this chat's pattern, and the next request changes it. Loading it restarts the player."
+                        label="Code from the player"
+                        submitLabel="Use this code"
+                        onSubmit={applyEditedCode}
+                        onClose={() => setPasteDialog(null)}
+                    />
+                )}
+                {pasteDialog === 'error' && (
+                    <PasteDialog
+                        title="Fix an error"
+                        explanation="Paste the error message the player shows. It is sent to the model together with the pattern in the player, with a request to fix only that."
+                        label="Error message"
+                        submitLabel="Ask for a fix"
+                        onSubmit={fixError}
+                        onClose={() => setPasteDialog(null)}
+                    />
+                )}
             </main>
         </div>
     );
