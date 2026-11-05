@@ -550,3 +550,33 @@ test('custom music instructions are added to the prompt, and can be reset, expor
     const system = chatRequests[0].body.messages[0].content;
     expect(system.endsWith("# The User's Own Music Instructions\nFollow these where they do not conflict with the output contract and the Strudel facts above:\nPrefer minor keys and slow tempos.")).toBe(true);
 });
+
+test('the model list shows context and output limits where OpenRouter reports them', async ({ page }) => {
+    await mockNetwork(page);
+    await page.goto('./');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByText('Browse all OpenRouter models').click();
+    await expect(page.getByText('200k context · 32k max output')).toBeVisible(); // context and max output reported
+    await expect(page.getByText('256k context', { exact: true })).toBeVisible(); // only the context reported
+});
+
+test('the conversation stops following new text when the reader scrolls up', async ({ page }) => {
+    await mockNetwork(page);
+    await delayedReply(page, `Here:\n\`\`\`js\n${'$: s("bd*4")\n'.repeat(30)}\`\`\``, { ms: 1500 });
+    const long = Array.from({ length: 30 }, (_, i) => [{ role: 'user', content: `message ${i}` }, { role: 'assistant', content: 'x\n'.repeat(5), model: 'M' }]).flat();
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_chats: JSON.stringify([{ id: 'c1', name: 'long', createdAt: '2026-01-01T00:00:00Z', messages: long }]), openrouter_current_chat_id: 'c1' });
+    await page.goto('./');
+    const list = page.getByRole('region', { name: 'Conversation' });
+    const atBottom = () => list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 48);
+    expect(await atBottom()).toBe(true);
+
+    await page.getByLabel('Message', { exact: true }).fill('more');
+    await page.keyboard.press('Enter');
+    await expect.poll(atBottom).toBe(true); // sending follows the conversation
+    await list.evaluate((el) => { el.scrollTop = 0; el.dispatchEvent(new Event('scroll')); });
+    await expect(page.getByRole('status')).toHaveText(/Reply received/, { timeout: 5000 });
+    expect(await list.evaluate((el) => el.scrollTop)).toBe(0); // the reply did not pull the reader down
+
+    await list.evaluate((el) => { el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
+    expect(await atBottom()).toBe(true);
+});

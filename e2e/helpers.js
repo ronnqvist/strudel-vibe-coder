@@ -20,7 +20,7 @@ export function decodeStrudelSrc(src) {
 const MODELS_FIXTURE = {
     data: [
         { id: '~x-ai/grok-latest', name: 'xAI: Grok Latest', created: 3, context_length: 256000, pricing: { prompt: '0.000002', completion: '0.00001' }, architecture: { output_modalities: ['text'] } },
-        { id: '~anthropic/claude-opus-latest', name: 'Anthropic: Claude Opus Latest', created: 2, context_length: 200000, pricing: { prompt: '0.000005', completion: '0.000025' }, architecture: { output_modalities: ['text'] } },
+        { id: '~anthropic/claude-opus-latest', name: 'Anthropic: Claude Opus Latest', created: 2, context_length: 200000, top_provider: { max_completion_tokens: 32000 }, pricing: { prompt: '0.000005', completion: '0.000025' }, architecture: { output_modalities: ['text'] } },
         { id: '~openai/gpt-sol-latest', name: 'OpenAI: GPT Sol Latest', created: 2, context_length: 200000, pricing: { prompt: '0.000003', completion: '0.000015' }, architecture: { output_modalities: ['text'] } },
         { id: '~deepseek/deepseek-flash-latest', name: 'DeepSeek: DeepSeek Flash Latest', created: 1, context_length: 128000, pricing: { prompt: '0.0000001', completion: '0.0000003' }, architecture: { output_modalities: ['text'] } },
     ],
