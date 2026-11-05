@@ -445,3 +445,25 @@ test('"Fix an error" sends the pasted error with the pattern on stage', async ({
     expect(sent).toContain('$: s("hh*8").foo()');
     expect(sent).toContain('TypeError: s(...).foo is not a function');
 });
+
+test('an exported chat keeps its pattern revisions through import', async ({ page }) => {
+    await mockNetwork(page);
+    await seedStorage(page, {
+        openrouter_current_code: '$: s("hh*8")',
+        openrouter_chats: JSON.stringify([{ id: 'c1', name: 'keep me', createdAt: '2026-01-01T00:00:00Z', messages: [{ role: 'user', content: 'x' }] }]),
+        openrouter_current_chat_id: 'c1',
+    });
+    await page.goto('./');
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export chat keep me' }).click()]);
+    const file = JSON.parse(await (await download.createReadStream()).toArray().then(parts => Buffer.concat(parts).toString('utf8')));
+    expect(file.version).toBe(3);
+    expect(file.chats[0].revisions[0]).toMatchObject({ code: '$: s("hh*8")', origin: 'legacy' });
+
+    await page.getByRole('button', { name: 'New chat' }).click();
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe(''); // a new chat has an empty stage
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await page.locator('input[type=file]').setInputFiles({ name: 'chat.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
+    await expect(page.getByRole('dialog', { name: 'Chats' })).toBeHidden();
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('$: s("hh*8")'); // the imported chat is current, with its pattern
+});
