@@ -1,10 +1,12 @@
-# Independent review: Strudel Vibe Coder (upstream) and strudel.grok.me (downstream)
+# Independent review, pass 2: Strudel Vibe Coder (upstream) and strudel.grok.me (downstream)
+
+Run this pass after strudel.grok.me has been updated from `HANDOFF_GROK_BUILD.md`. Pass 1, `ANTIGRAVITY_REVIEW_PROMPT_UPSTREAM.md`, reviews upstream alone before the handoff. If its report exists, read it first and check whether its findings were fixed, both upstream and in the downstream port.
 
 You are an independent reviewer. Review the **finished state** of two related apps after a round of reliability and prompt work. Report what is still wrong or risky now; do not re-review issues that are already closed. Your output will be filed as GitHub issues, so every finding must stand on its own.
 
 ## What you are reviewing
 
-- **Upstream (MIT, open source):** https://github.com/ronnqvist/strudel-vibe-coder. Review `main` after the stacked PRs #9, #10, #11 and #12 are merged. If they are not merged yet, review the head of PR #12's branch, which contains all four. Record the exact commit you reviewed.
+- **Upstream (MIT, open source):** https://github.com/ronnqvist/strudel-vibe-coder. Review `main`; the work under review landed in merged PRs #9–#12, plus any fixes made after pass 1. Record the exact commit you reviewed.
 - **Upstream live site:** https://ronnqvist.github.io/strudel-vibe-coder/ (GitHub Pages, deployed by `.github/workflows/pages.yml`).
 - **Downstream:** https://strudel.grok.me/ is a separate codebase built in Grok Build, synced from upstream using `HANDOFF_GROK_BUILD.md`. Its server code is not public. Review only what the deployed client shows, and say so.
 - **Background:** read `CLAUDE.md`, `README.md` and `HANDOFF_GROK_BUILD.md` in the upstream repository first. Closed issues #5, #6, #7 and #8 describe what was already fixed.
