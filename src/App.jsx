@@ -10,6 +10,7 @@ import MobileTabs from './components/MobileTabs';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
 import { patternSyntaxError } from './lib/patternCheck';
+import { announcement as describeOutcome, apiConversation, canAutoLoad, notLoadedNotice } from './lib/generation';
 import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
 import { useModelCatalog } from './hooks/useModelCatalog';
@@ -105,16 +106,21 @@ function App() {
 
         const reply = (result) => ({
             role: 'assistant',
-            content: result.content,
+            content: result.content || (result.status === 'error' ? `Error: ${result.error?.message}` : ''),
             code: result.code,
             model: result.modelLabel ?? settings.modelName,
+            status: result.status,
+            ...(result.finishReason && { finishReason: result.finishReason }),
+            ...(result.error && result.content && { error: result.error.message }),
+            ...(result.usage && { usage: result.usage }),
+            // read by earlier versions of the app
             ...(result.stopped && { stopped: true }),
             ...(result.truncated && { truncated: true }),
         });
 
         try {
-            // Only role and content go to the API
-            const apiMessages = updatedMessages.map(msg => ({ role: msg.role, content: msg.content }));
+            // Only role and content go to the API, and only of replies that completed
+            const apiMessages = apiConversation(updatedMessages);
 
             const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
                 signal: controller.signal,
@@ -122,7 +128,7 @@ function App() {
             });
 
             // Stopped before anything arrived: keep the user's message, add no empty reply
-            if (result.stopped && !result.content) {
+            if (result.status === 'aborted' && !result.content) {
                 setAnnouncement('Generation stopped');
                 return;
             }
@@ -133,22 +139,22 @@ function App() {
                 name = input.slice(0, 30) + (input.length > 30 ? '...' : '');
             }
 
-            chat.updateChat(chatId, { messages: [...updatedMessages, reply(result)], name });
+            const message = reply(result);
+            if (result.status === 'error' && !result.content) delete message.model; // a plain error line, as before
+            chat.updateChat(chatId, { messages: [...updatedMessages, message], name });
 
-            // Load the pattern into the player only when the reply is complete and the code parses
-            const complete = !result.stopped && !result.truncated;
-            const loaded = result.code && complete ? await loadIntoPlayer(result.code) : false;
-            if (result.truncated) setPlayerNotice('Not loaded into the player: the reply was cut off at the model\'s length limit, so its code is incomplete. The previous pattern is still loaded.');
-            setAnnouncement(result.stopped
-                ? 'Generation stopped'
-                : result.truncated ? 'Reply was cut off at the length limit. The pattern was not loaded.'
-                : !result.code ? 'Reply received'
-                    : loaded ? 'Reply received. The pattern was loaded into the player.'
-                        : 'Reply received. The pattern has a syntax error and was not loaded.');
+            // Load the pattern into the player only when the reply completed and the code parses
+            let load = 'none';
+            if (result.code && canAutoLoad(result.status)) {
+                load = (await loadIntoPlayer(result.code)) ? 'loaded' : 'invalid';
+            } else if (result.code && notLoadedNotice(result.status)) {
+                setPlayerNotice(notLoadedNotice(result.status));
+            }
+            setAnnouncement(describeOutcome(result, load));
         } catch (error) {
+            // Only a programming error gets here: generateStrudelCode reports failures as a status
             setAnnouncement(`Error: ${error.message}`);
-            const kept = error.partial ? [reply({ content: error.partial, code: null, stopped: true, modelLabel: settings.modelName })] : [];
-            chat.updateChat(chatId, { messages: [...updatedMessages, ...kept, { role: 'assistant', content: `Error: ${error.message}` }] });
+            chat.updateChat(chatId, { messages: [...updatedMessages, { role: 'assistant', content: `Error: ${error.message}`, status: 'error' }] });
         } finally {
             abortRef.current = null;
             setStreaming(null);

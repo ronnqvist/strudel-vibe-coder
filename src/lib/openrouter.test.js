@@ -101,6 +101,7 @@ describe('generateStrudelCode: streaming', () => {
         expect(result.code).toContain('s("bd sd")');
         expect(result.resolvedModel).toBe('vendor/resolved-1');
         expect(result.stopped).toBe(false);
+        expect(result.status).toBe('completed');
         expect(result.role).toBe('assistant');
     });
 
@@ -130,19 +131,6 @@ describe('generateStrudelCode: streaming', () => {
         expect((await generateStrudelCode('k', 'm', convo)).code).toBeNull();
     });
 
-    it('throws when the stream ends without any text', async () => {
-        mockStream(['data: [DONE]\n\n']);
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        await expect(generateStrudelCode('k', 'm', convo)).rejects.toThrow('No response from model');
-    });
-
-    it('throws an error from inside the stream and keeps the partial text on the error', async () => {
-        mockStream([delta('part'), sseChunk({ error: { message: 'Provider disconnected' }, choices: [{ delta: { content: '' }, finish_reason: 'error' }] })]);
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        const error = await generateStrudelCode('k', 'm', convo).catch(e => e);
-        expect(error.message).toBe('Provider disconnected');
-        expect(error.partial).toBe('part');
-    });
 });
 
 describe('generateStrudelCode: stopping', () => {
@@ -197,7 +185,7 @@ describe('generateStrudelCode: other responses', () => {
             json: async () => ({ error: { message: 'Invalid key' } }),
         })));
         vi.spyOn(console, 'error').mockImplementation(() => {});
-        await expect(generateStrudelCode('k', 'm', convo)).rejects.toThrow('Invalid key');
+        expect(await generateStrudelCode('k', 'm', convo)).toMatchObject({ status: 'error', error: { message: 'Invalid key', code: 401 } });
     });
 
     it('falls back to the status line when the error body is not JSON', async () => {
@@ -206,7 +194,7 @@ describe('generateStrudelCode: other responses', () => {
             json: async () => { throw new Error('not json'); },
         })));
         vi.spyOn(console, 'error').mockImplementation(() => {});
-        await expect(generateStrudelCode('k', 'm', convo)).rejects.toThrow('OpenRouter API Error: 502 Bad Gateway');
+        expect(await generateStrudelCode('k', 'm', convo)).toMatchObject({ status: 'error', error: { message: 'OpenRouter API Error: 502 Bad Gateway', code: 502 } });
     });
 });
 

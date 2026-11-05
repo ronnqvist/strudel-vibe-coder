@@ -258,3 +258,17 @@ test('"Enter player" is a visible link that opens the current pattern on strudel
     expect(seen.some(s => s.startsWith('IFRAME'))).toBe(false);
     expect(new Set(seen).size).toBeGreaterThan(3);
 });
+
+test('a reply interrupted before it finished is marked and does not replace the loaded pattern (#5)', async ({ page }) => {
+    await mockNetwork(page, { reply: 'Here:\n```js\n$: s("bd*4")', finishReason: null }); // stream closes: no finish_reason, no [DONE]
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_current_code: '$: s("hh*8")' });
+    await page.goto('./');
+    const before = await page.locator('iframe').getAttribute('src');
+
+    await page.getByLabel('Message', { exact: true }).fill('beat');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status')).toHaveText('The reply was interrupted. The pattern was not loaded.');
+    await expect(page.getByRole('alert').filter({ hasText: 'Not loaded into the player' })).toContainText('interrupted');
+    await expect(page.getByText('interrupted', { exact: true })).toBeVisible();
+    expect(await page.locator('iframe').getAttribute('src')).toBe(before);
+});

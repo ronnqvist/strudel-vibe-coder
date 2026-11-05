@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-/** Server-sent-events body in the shape OpenRouter streams. */
+/**
+ * Server-sent-events body in the shape OpenRouter streams.
+ * `finishReason: null` ends the body after the content, with no final chunk and no [DONE]
+ * (a connection that closed early).
+ */
 export function sseBody(content, model = 'vendor/resolved-1', finishReason = 'stop') {
     const chunk = { model, choices: [{ delta: { content } }] };
+    if (finishReason === null) return `data: ${JSON.stringify(chunk)}\n\n`;
     const end = { model, choices: [{ delta: {}, finish_reason: finishReason }] };
     return `data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(end)}\n\ndata: [DONE]\n\n`;
 }
@@ -28,7 +33,7 @@ const MODELS_FIXTURE = {
  * - OpenRouter's model list and chat endpoint are mocked; chat requests are recorded
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ reply?: string, model?: string, finishReason?: string }} [options] what the mocked model answers
+ * @param {{ reply?: string, model?: string, finishReason?: string | null }} [options] what the mocked model answers
  * @returns {{ chatRequests: { body: any, headers: Record<string, string> }[] }}
  */
 export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', model = 'vendor/resolved-1', finishReason = 'stop' } = {}) {
