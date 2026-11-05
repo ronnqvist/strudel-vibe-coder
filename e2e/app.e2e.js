@@ -28,6 +28,8 @@ test('loads: title, landmarks, empty state, and a strict CSP', async ({ page }) 
     await expect(page.getByRole('main')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Describe a groove.' })).toBeVisible();
     await expect(page.getByRole('group', { name: 'Starter ideas' }).getByRole('button')).toHaveCount(3);
+    // a first visit has a pattern to press play on
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toMatch(/^\/\/ Welcome! Press play/);
 
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
     expect(csp).toContain("script-src 'self'");
@@ -466,4 +468,28 @@ test('an exported chat keeps its pattern revisions through import', async ({ pag
     await page.locator('input[type=file]').setInputFiles({ name: 'chat.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
     await expect(page.getByRole('dialog', { name: 'Chats' })).toBeHidden();
     expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('$: s("hh*8")'); // the imported chat is current, with its pattern
+});
+
+test('when the chats cannot be saved, the user is told and can export them', async ({ page }) => {
+    await mockNetwork(page);
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+    await page.addInitScript(() => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === 'openrouter_chats' && window.__storageFull) throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+            return original.call(this, key, value);
+        };
+    });
+    await page.goto('./');
+    await expect(page.getByText('could not be saved')).toHaveCount(0);
+    await page.evaluate(() => { window.__storageFull = true; });
+
+    await page.getByLabel('Message', { exact: true }).fill('beat');
+    await page.keyboard.press('Enter');
+    const warning = page.getByRole('alert').filter({ hasText: 'could not be saved' });
+    await expect(warning).toBeVisible();
+    const [download] = await Promise.all([page.waitForEvent('download'), warning.getByRole('button', { name: 'Export all chats' }).click()]);
+    expect(download.suggestedFilename()).toMatch(/^strudel-chats-backup-.*\.json$/);
+    await warning.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(warning).toHaveCount(0);
 });

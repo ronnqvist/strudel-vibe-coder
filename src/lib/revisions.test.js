@@ -114,3 +114,23 @@ describe('migration of the global pattern of earlier versions', () => {
         expect(stageCode(chats[0])).toBe('s("bd")');
     });
 });
+
+describe('starter pattern', () => {
+    const store = (data) => ({ getItem: (k) => (k in data ? data[k] : null) });
+    it('a first visit starts with the starter pattern on stage; it is not sent as the pattern to change', async () => {
+        const { STARTER_PATTERN } = await import('../config');
+        const { patternForRequest } = await import('./revisions');
+        const { chats } = loadInitialChats(store({}));
+        expect(selectedRevision(chats[0])).toMatchObject({ code: STARTER_PATTERN, origin: 'starter' });
+        expect(patternForRequest(chats[0])).toBe('');
+    });
+    it('a returning user with no chats does not get it again', () => {
+        const { chats } = loadInitialChats(store({ [CHATS_KEY]: '[]', [CURRENT_CHAT_KEY]: 'x' }));
+        expect(stageCode(chats[0])).toBe('');
+    });
+    it('the starter pattern is valid JavaScript', async () => {
+        const { STARTER_PATTERN } = await import('../config');
+        const { patternSyntaxError } = await import('./patternCheck');
+        expect(await patternSyntaxError(STARTER_PATTERN)).toBeNull();
+    });
+});

@@ -16,17 +16,18 @@ import { generateId } from './utils';
  */
 
 /**
- * @typedef {'reply' | 'message' | 'edited' | 'legacy'} RevisionOrigin
+ * @typedef {'reply' | 'message' | 'edited' | 'legacy' | 'starter'} RevisionOrigin
  *   reply:   loaded automatically from a completed reply
  *   message: loaded from a chat message with "Use this version"
  *   edited:  pasted by the user (code edited in the Strudel editor, which does not sync back)
  *   legacy:  the pattern an earlier version of the app had in the player
+ *   starter: the welcome pattern of a first visit (not sent to the model as the pattern to change)
  * @typedef {{ id: string, code: string, origin: RevisionOrigin, messageId?: string, model?: string,
  *   repaired?: true, createdAt: string }} Revision
  * @typedef {import('./chats').Chat} Chat
  */
 
-export const REVISION_ORIGINS = ['reply', 'message', 'edited', 'legacy'];
+export const REVISION_ORIGINS = ['reply', 'message', 'edited', 'legacy', 'starter'];
 
 /** Revisions kept per chat (the selected and the previous one are always kept as well). */
 export const MAX_REVISIONS = 50;
@@ -120,4 +121,10 @@ export function addRevision(chat, { code, origin, messageId, model, repaired }, 
 export function adoptLegacyCode(chat, code, options) {
     if (!code || !code.trim() || stageCode(chat) === code) return chat;
     return addRevision(chat, { code, origin: 'legacy' }, options).chat;
+}
+
+/** The code to tell the model about as "the pattern in the player", or '' (the starter pattern is not the user's). */
+export function patternForRequest(chat) {
+    const revision = selectedRevision(chat);
+    return revision && revision.origin !== 'starter' ? revision.code : '';
 }

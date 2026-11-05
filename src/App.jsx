@@ -18,7 +18,7 @@ import { useModelCatalog } from './hooks/useModelCatalog';
 import { useRequests } from './hooks/useRequests';
 import { appendMessage, nameAfterFirstMessage, updateMessage } from './lib/chats';
 import { generateId } from './lib/utils';
-import { addRevision, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
+import { addRevision, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
 
 function App() {
     const settings = useSettings();
@@ -126,9 +126,8 @@ function App() {
         const chatName = () => chat.chats.find(c => c.id === chatId)?.name ?? 'another chat';
 
         try {
-            const selected = selectedRevision(chat.chats.find(c => c.id === chatId));
             // Only role and content go to the API, only of replies that completed, plus the pattern on this chat's stage
-            const apiMessages = withCurrentPattern(apiConversation(messages), selected?.code);
+            const apiMessages = withCurrentPattern(apiConversation(messages), patternForRequest(chat.chats.find(c => c.id === chatId)));
 
             const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
                 signal: req.signal,
@@ -238,6 +237,14 @@ function App() {
             />
 
             <div role="status" aria-live="polite" className="sr-only">{announcement}</div>
+
+            {chat.showSaveWarning && (
+                <div role="alert" className="flex flex-wrap items-center gap-3 px-4 py-2 bg-red-900/40 border-b border-red-700 text-sm text-red-100">
+                    <p className="flex-1 min-w-0">Your chats could not be saved in this browser (its storage is full or blocked). They will be lost when you close or reload the page. Export them to keep them.</p>
+                    <button onClick={chat.exportAllChats} className="px-3 py-1 rounded bg-red-700 text-white hover:bg-red-600">Export all chats</button>
+                    <button onClick={chat.dismissSaveWarning} className="underline hover:text-white">Dismiss</button>
+                </div>
+            )}
 
             {/* Main Content - Split View */}
             <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">

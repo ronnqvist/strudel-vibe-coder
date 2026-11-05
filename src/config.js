@@ -39,3 +39,15 @@ export const LEGACY_DEFAULT_BOOKMARK_IDS = [
 
 /** Suggestions shown in an empty chat. Plain ASCII, so they work with any model. */
 export const STARTER_PROMPTS = ['acid techno bass', 'dusty boom bap', 'lush ambient pads'];
+
+/**
+ * The pattern on the stage the very first time the app is opened (no chats and no earlier pattern
+ * stored), so there is something to press play on. Uses only basic, documented Strudel functions.
+ * It is never sent to the model as "the pattern to change".
+ */
+export const STARTER_PATTERN = `// Welcome! Press play in the player, or describe a sound in the chat.
+setcpm(120/4)
+// drums from the Roland TR-909 bank: kick, clap on 2 and 4, hi-hats
+$: s("bd*4, ~ cp, hh*8").bank("RolandTR909")
+// a sawtooth bass, one note per cycle, filtered to sound darker
+$: note("<c2 c2 eb2 g1>").s("sawtooth").lpf(600)`;

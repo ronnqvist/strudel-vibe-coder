@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { generateId } from './utils';
-import { adoptLegacyCode } from './revisions';
+import { addRevision, adoptLegacyCode } from './revisions';
+import { STARTER_PATTERN } from '../config';
 
 export const CHATS_KEY = 'openrouter_chats';
 export const CURRENT_CHAT_KEY = 'openrouter_current_chat_id';
@@ -64,13 +65,24 @@ export function loadInitialChats(storage = localStorage) {
     }
 
     if (chats.length === 0) {
-        const chat = adoptLegacyCode(createChat(), legacyCode);
+        let chat = adoptLegacyCode(createChat(), legacyCode);
+        // A first visit (nothing stored at all) starts with a pattern to press play on
+        const firstVisit = legacyCode === null && storageEmpty(storage);
+        if (firstVisit && STARTER_PATTERN) chat = addRevision(chat, { code: STARTER_PATTERN, origin: 'starter' }).chat;
         return { chats: [chat], currentId: chat.id };
     }
     const stored = storage.getItem(CURRENT_CHAT_KEY);
     const currentId = chats.some(c => c.id === stored) ? stored : chats[0].id;
     chats = chats.map(c => (c.id === currentId ? adoptLegacyCode(c, legacyCode) : c));
     return { chats, currentId };
+}
+
+function storageEmpty(storage) {
+    try {
+        return storage.getItem(CHATS_KEY) === null && storage.getItem(CURRENT_CHAT_KEY) === null;
+    } catch {
+        return false;
+    }
 }
 
 /**
