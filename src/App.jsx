@@ -305,6 +305,7 @@ function App() {
                 {/* Chat Section */}
                 <div className={`${tab === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 md:flex-none w-full md:w-1/2 flex-col border-r border-cyber-gray bg-cyber-dark/50`}>
                     <MessageList
+                        chatId={currentChatId}
                         messages={chat.messages}
                         isLoading={isLoading}
                         streamingText={requests.textFor(currentChatId)}
