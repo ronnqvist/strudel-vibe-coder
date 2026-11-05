@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LEGACY_DEFAULT_BOOKMARK_IDS, MODELS_API_URL, RECOMMENDED_MODELS } from '../config';
-import { addBookmark, fetchCatalog, filterModels, migrateBookmarks, parseCatalog, providersOf, unlistedBookmarks } from './models';
+import { addBookmark, fetchCatalog, filterModels, formatLimits, migrateBookmarks, parseCatalog, providersOf, unlistedBookmarks } from './models';
 
 const row = (id, extra = {}) => ({
     id,
@@ -144,5 +144,22 @@ describe('fetchCatalog', () => {
     it('throws a readable error for an HTTP failure', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, statusText: 'Service Unavailable' })));
         await expect(fetchCatalog()).rejects.toThrow('OpenRouter returned 503 Service Unavailable');
+    });
+});
+
+describe('model limits', () => {
+    it('reads the maximum output from top_provider, and null when it is missing', () => {
+        const [withLimits, without] = parseCatalog({ data: [
+            { id: 'a/b', name: 'A', context_length: 200000, top_provider: { max_completion_tokens: 32000 } },
+            { id: 'c/d', name: 'C', top_provider: { max_completion_tokens: null } },
+        ] });
+        expect(withLimits).toMatchObject({ contextLength: 200000, maxOutput: 32000 });
+        expect(without).toMatchObject({ contextLength: null, maxOutput: null });
+    });
+    it('formats what is reported, and nothing else', () => {
+        expect(formatLimits({ contextLength: 200000, maxOutput: 32000 })).toBe('200k context · 32k max output');
+        expect(formatLimits({ contextLength: 1_048_576, maxOutput: null })).toBe('1M context');
+        expect(formatLimits({ contextLength: 2_500_000, maxOutput: 512 })).toBe('2.5M context · 512 max output');
+        expect(formatLimits({ contextLength: null, maxOutput: null })).toBe('');
     });
 });

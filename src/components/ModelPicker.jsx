@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Star } from 'lucide-react';
 import { DEFAULT_MODEL_ID, RECOMMENDED_MODELS } from '../config';
-import { addBookmark, filterModels, providersOf, unlistedBookmarks } from '../lib/models';
+import { addBookmark, filterModels, formatLimits, providersOf, unlistedBookmarks } from '../lib/models';
 
 const MAX_RESULTS = 40;
 
@@ -179,6 +179,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                                             <span className="block text-[10px] text-gray-400 font-mono truncate">
                                                 {m.id}{m.isFree ? ' · free' : ''}
                                             </span>
+                                            {formatLimits(m) && <span className="block text-[10px] text-gray-500 truncate">{formatLimits(m)}</span>}
                                         </button>
                                         <button
                                             onClick={() => bookmark(m)}

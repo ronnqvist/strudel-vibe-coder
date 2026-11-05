@@ -5,7 +5,7 @@ import { LEGACY_DEFAULT_BOOKMARK_IDS, MODELS_API_URL, RECOMMENDED_MODELS } from 
  * @typedef {{ id: string, name: string }} Bookmark
  * @typedef {{
  *   id: string, name: string, provider: string, isFree: boolean, isAlias: boolean,
- *   contextLength: number | null, created: number
+ *   contextLength: number | null, maxOutput: number | null, created: number
  * }} CatalogModel
  */
 
@@ -31,8 +31,23 @@ export function parseCatalog(json) {
             isFree: m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0'),
             isAlias: m.id.startsWith('~'),
             contextLength: typeof m.context_length === 'number' ? m.context_length : null,
+            maxOutput: typeof m.top_provider?.max_completion_tokens === 'number' ? m.top_provider.max_completion_tokens : null,
             created: typeof m.created === 'number' ? m.created : 0,
         }));
+}
+
+const tokens = (n) => (n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
+/**
+ * The limits OpenRouter reports for a model, for the model list: "200k context · 32k max output".
+ * Parts that are not reported are left out; '' when neither is.
+ * @param {Pick<CatalogModel, 'contextLength' | 'maxOutput'>} model
+ */
+export function formatLimits({ contextLength, maxOutput }) {
+    const parts = [];
+    if (contextLength > 0) parts.push(`${tokens(contextLength)} context`);
+    if (maxOutput > 0) parts.push(`${tokens(maxOutput)} max output`);
+    return parts.join(' · ');
 }
 
 /**

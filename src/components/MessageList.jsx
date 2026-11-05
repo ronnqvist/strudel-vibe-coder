@@ -5,17 +5,34 @@ import MessageItem from './MessageItem';
 import { STARTER_PROMPTS } from '../config';
 
 /** Scrolling message column: empty state, messages, and the "generating" indicator. */
-const MessageList = ({ messages, isLoading, streamingText, streamingModel, onPickPrompt, editing, onEditContentChange, onStartEdit, onCancelEdit, onSaveEdit, onLoadCode, selectedMessageId, onRetry }) => {
+/** How close to the bottom (in pixels) still counts as "at the bottom". */
+const STICK_DISTANCE = 48;
+
+const MessageList = ({ chatId, messages, isLoading, streamingText, streamingModel, onPickPrompt, editing, onEditContentChange, onStartEdit, onCancelEdit, onSaveEdit, onLoadCode, selectedMessageId, onRetry }) => {
     const containerRef = useRef(null);
+    // Follow new text only while the reader is at the bottom: scrolling up to read stops it,
+    // scrolling back down (or opening another chat, or sending a message) starts it again.
+    const stickRef = useRef(true);
+    const lastCount = useRef(messages.length);
+
+    const onScroll = () => {
+        const el = containerRef.current;
+        if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_DISTANCE;
+    };
+
+    useEffect(() => { stickRef.current = true; }, [chatId]);
 
     useEffect(() => {
-        if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
-        }
-    }, [messages, streamingText]);
+        const el = containerRef.current;
+        if (!el) return;
+        const sentNow = messages.length > lastCount.current && messages[messages.length - 1]?.role === 'user';
+        lastCount.current = messages.length;
+        if (sentNow) stickRef.current = true;
+        if (stickRef.current) el.scrollTop = el.scrollHeight;
+    }, [messages, streamingText, chatId]);
 
     return (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={containerRef} role="region" aria-label="Conversation" tabIndex={0}>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={containerRef} onScroll={onScroll} role="region" aria-label="Conversation" tabIndex={0}>
             {messages.length === 0 && (
                 <div className="text-center text-gray-400 mt-10">
                     <Terminal className="w-12 h-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
