@@ -92,9 +92,9 @@ export function apiConversation(messages) {
  * version of the app (after a rollback) still marks these replies.
  * @param {import('./openrouter').GenerationResult} result
  * @param {string} [modelName] fallback when the result names no model
- * @param {() => string} [makeId]
+ * @param {{ makeId?: () => string, promptVersion?: string }} [options] `promptVersion`: of the system prompt used
  */
-export function replyMessage(result, modelName, makeId = generateId) {
+export function replyMessage(result, modelName, { makeId = generateId, promptVersion } = {}) {
     const plainError = result.status === 'error' && !result.content;
     return {
         id: makeId(),
@@ -106,31 +106,8 @@ export function replyMessage(result, modelName, makeId = generateId) {
         ...(result.finishReason && { finishReason: result.finishReason }),
         ...(result.error && result.content && { error: result.error.message }),
         ...(result.usage && { usage: result.usage }),
+        ...(promptVersion && { promptVersion }),
         ...(result.status === 'aborted' && { stopped: true }),
         ...(result.status === 'truncated' && { truncated: true }),
     };
-}
-
-/**
- * Tell the model which pattern is on this chat's stage: the selected revision, which may be an
- * older reply, a pattern the user pasted from the Strudel editor, or one loaded by an earlier
- * version. It is added in front of the newest user message, in the request only (the chat keeps
- * what the user typed). Without a pattern the conversation is sent unchanged.
- * @param {{ role: string, content: string }[]} apiMessages
- * @param {string | null | undefined} code
- */
-export function withCurrentPattern(apiMessages, code) {
-    if (!code || !code.trim()) return apiMessages;
-    const last = apiMessages.length - 1;
-    if (last < 0 || apiMessages[last].role !== 'user') return apiMessages;
-    const context = [
-        'This is the pattern currently in the player. Change this pattern, unless I ask for something new.',
-        'Keep everything I do not ask you to change.',
-        '```js',
-        code,
-        '```',
-        '',
-        'My request:',
-    ].join('\n');
-    return apiMessages.map((m, i) => (i === last ? { role: m.role, content: `${context}\n${m.content}` } : m));
 }

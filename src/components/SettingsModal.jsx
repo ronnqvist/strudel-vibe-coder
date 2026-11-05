@@ -2,9 +2,10 @@
 import React, { useId } from 'react';
 import { Info } from 'lucide-react';
 import ModelPicker from './ModelPicker';
+import MusicSettings from './MusicSettings';
 import { useDialog } from '../hooks/useDialog';
 
-const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRememberChange, onForgetKey, model, onModelChange, savedModels, onSavedModelsChange, catalog, onClose }) => {
+const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRememberChange, onForgetKey, model, onModelChange, savedModels, onSavedModelsChange, catalog, promptPrefs, onPromptPrefsChange, musicExtras, onClose }) => {
     const { attach, onKeyDown } = useDialog({ onClose, trap: true });
     const titleId = useId();
     return (
@@ -73,6 +74,8 @@ const SettingsModal = ({ apiKey, onApiKeyChange, hasHashKey, remember, onRemembe
                     onBookmarksChange={onSavedModelsChange}
                     catalog={catalog}
                 />
+
+                <MusicSettings prefs={promptPrefs} onPrefsChange={onPromptPrefsChange}>{musicExtras}</MusicSettings>
 
                 <button
                     onClick={onClose}

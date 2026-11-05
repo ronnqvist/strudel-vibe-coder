@@ -5,6 +5,9 @@ import { DEFAULT_MODEL_ID } from '../config';
 import { migrateBookmarks } from '../lib/models';
 import { loadApiKey, persistApiKey, persistRemember, readRemember } from '../lib/keyStorage';
 import { urlKey } from '../lib/urlKey';
+import { DEFAULT_PREFS, cleanPrefs } from '../lib/prompt';
+
+export const PROMPT_PREFS_KEY = 'openrouter_prompt_prefs';
 
 /**
  * API key, active model and model bookmarks.
@@ -17,6 +20,9 @@ export function useSettings() {
     const [apiKey, setApiKey] = useState(() => loadApiKey(localStorage));
     const [hashApiKey, setHashApiKey] = useState(urlKey);
     const [model, setModel] = useLocalStorage('openrouter_model', DEFAULT_MODEL_ID);
+    // Musical preferences for the prompt (visuals, explanation level); unknown values fall back to the defaults
+    const [storedPrefs, setStoredPrefs] = useLocalStorage(PROMPT_PREFS_KEY, DEFAULT_PREFS, { json: true });
+    const promptPrefs = cleanPrefs(storedPrefs);
     // Bookmarks are brought up to date once, at startup (see migrateBookmarks), then saved as usual.
     const [savedModels, setSavedModels] = useState(() =>
         migrateBookmarks(
@@ -59,6 +65,8 @@ export function useSettings() {
         setModel,
         savedModels,
         setSavedModels,
+        promptPrefs,
+        setPromptPrefs: (patch) => setStoredPrefs(prev => cleanPrefs({ ...cleanPrefs(prev), ...patch })),
         modelName: savedModels.find(m => m.id === model)?.name || model,
     };
 }

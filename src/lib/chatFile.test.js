@@ -152,7 +152,7 @@ describe('parseChatFile: format 3 (pattern revisions)', () => {
         id: 'a', name: 'with revisions', createdAt: '2026-11-05T10:00:00.000Z',
         messages: [
             { id: 'm1', role: 'user', content: 'beat' },
-            { id: 'm2', role: 'assistant', content: '```js\ns("bd")\n```', code: 's("bd")', model: 'M', status: 'completed', finishReason: 'stop', usage: { total_tokens: 12, cost: 0.001, junk: 'x' }, revisionId: 'r1' },
+            { id: 'm2', role: 'assistant', content: '```js\ns("bd")\n```', code: 's("bd")', model: 'M', status: 'completed', finishReason: 'stop', usage: { total_tokens: 12, cost: 0.001, junk: 'x' }, revisionId: 'r1', promptVersion: '2.0.0' },
             { id: 'm3', role: 'assistant', content: 'part', model: 'M', status: 'interrupted', error: 'gone' },
         ],
         revisions: [

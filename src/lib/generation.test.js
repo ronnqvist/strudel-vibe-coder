@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest';
-import { STATUSES, announcement, apiConversation, canAutoLoad, messageStatus, notLoadedNotice, replyMessage, statusBadge, withCurrentPattern } from './generation';
+import { STATUSES, announcement, apiConversation, canAutoLoad, messageStatus, notLoadedNotice, replyMessage, statusBadge } from './generation';
 
 describe('canAutoLoad', () => {
     it('allows only a completed reply', () => {
@@ -56,7 +56,7 @@ describe('apiConversation', () => {
 
 describe('replyMessage', () => {
     const base = { content: '```js\ns("bd")\n```', code: 'c', modelLabel: 'M', finishReason: 'stop', error: null, usage: null };
-    const id = () => 'id1';
+    const id = { makeId: () => 'id1' };
     it('stores status and the flags earlier versions read', () => {
         expect(replyMessage({ ...base, status: 'completed' }, 'X', id)).toEqual({ id: 'id1', role: 'assistant', content: base.content, code: 'c', model: 'M', status: 'completed', finishReason: 'stop' });
         expect(replyMessage({ ...base, status: 'aborted', finishReason: null }, 'X', id)).toMatchObject({ status: 'aborted', stopped: true });
@@ -68,21 +68,10 @@ describe('replyMessage', () => {
         expect(m.model).toBeUndefined();
         expect(messageStatus(m)).toBe('error');
     });
+    it('records the prompt version it was written with', () => {
+        expect(replyMessage({ ...base, status: 'completed' }, 'X', { makeId: () => 'i', promptVersion: '2.0.0' }).promptVersion).toBe('2.0.0');
+    });
     it('an error after some text keeps the text and the error message', () => {
         expect(replyMessage({ ...base, content: 'part', status: 'error', error: { message: 'boom' } }, 'X', id)).toMatchObject({ content: 'part', error: 'boom', model: 'M' });
-    });
-});
-
-describe('withCurrentPattern', () => {
-    const convo = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'slower please' }];
-    it('puts the selected pattern before the newest user message, in the request only', () => {
-        const out = withCurrentPattern(convo, 's("bd")');
-        expect(out.slice(0, 2)).toEqual(convo.slice(0, 2));
-        expect(out[2].content).toMatch(/currently in the player[\s\S]*```js\ns\("bd"\)\n```[\s\S]*My request:\nslower please$/);
-        expect(convo[2].content).toBe('slower please'); // not mutated
-    });
-    it('sends the conversation unchanged without a pattern', () => {
-        expect(withCurrentPattern(convo, '')).toBe(convo);
-        expect(withCurrentPattern(convo, null)).toBe(convo);
     });
 });

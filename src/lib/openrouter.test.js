@@ -59,6 +59,12 @@ describe('generateStrudelCode: request', () => {
         expect(init.headers.Authorization).toBe('Bearer sk-or-v1-test');
     });
 
+    it('sends the composed system prompt it is given', async () => {
+        const fetchMock = mockStream([delta('hi'), 'data: [DONE]\n\n']);
+        await generateStrudelCode('k', 'm', convo, 'M', { systemPrompt: 'composed prompt' });
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0]).toEqual({ role: 'system', content: 'composed prompt' });
+    });
+
     it('requires an API key and does not call the network without one', async () => {
         const fetchMock = mockStream([]);
         await expect(generateStrudelCode('  ', 'm', convo)).rejects.toThrow('API Key is required');
