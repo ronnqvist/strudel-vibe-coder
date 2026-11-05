@@ -8,10 +8,12 @@ import ChatInput from './components/ChatInput';
 import PlayerPanel from './components/PlayerPanel';
 import MobileTabs from './components/MobileTabs';
 import PasteDialog from './components/PasteDialog';
+import CustomInstructions from './components/CustomInstructions';
 import { generateStrudelCode } from './lib/openrouter';
 import { codeFromMessage } from './lib/extractCode';
 import { preparePattern } from './lib/patternCheck';
-import { announcement as describeOutcome, apiConversation, canAutoLoad, messageStatus, notLoadedNotice, replyMessage, withCurrentPattern } from './lib/generation';
+import { announcement as describeOutcome, apiConversation, canAutoLoad, messageStatus, notLoadedNotice, replyMessage } from './lib/generation';
+import { PROMPT_VERSION, boundConversation, buildRequestContext, composeSystemPrompt, selectModules } from './lib/prompt';
 import { useChats } from './hooks/useChats';
 import { useSettings } from './hooks/useSettings';
 import { useModelCatalog } from './hooks/useModelCatalog';
@@ -126,12 +128,22 @@ function App() {
         const chatName = () => chat.chats.find(c => c.id === chatId)?.name ?? 'another chat';
 
         try {
-            // Only role and content go to the API, only of replies that completed, plus the pattern on this chat's stage
-            const apiMessages = withCurrentPattern(apiConversation(messages), patternForRequest(chat.chats.find(c => c.id === chatId)));
+            // Only role and content go to the API, only of replies that completed, old patterns trimmed,
+            // plus the pattern on this chat's stage as context for the newest message
+            const stagePattern = patternForRequest(chat.chats.find(c => c.id === chatId));
+            const apiMessages = buildRequestContext(boundConversation(apiConversation(messages)), stagePattern);
+            // The system prompt for this request: the modules it needs and the user's preferences
+            const userText = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+            const systemPrompt = composeSystemPrompt({
+                modules: selectModules({ userText, selectedCode: stagePattern, prefs: settings.promptPrefs }),
+                prefs: settings.promptPrefs,
+                customInstructions: settings.customInstructions,
+            });
 
             const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
                 signal: req.signal,
                 onText: req.onText,
+                systemPrompt,
             });
 
             // Stopped before anything arrived: keep the user's message, add no empty reply
@@ -140,7 +152,7 @@ function App() {
                 return;
             }
 
-            const message = replyMessage(result, settings.modelName);
+            const message = replyMessage(result, settings.modelName, { promptVersion: PROMPT_VERSION });
             chat.updateChatWith(chatId, (c) => {
                 const next = appendMessage(c, message);
                 return firstMessageText ? nameAfterFirstMessage(next, firstMessageText) : next;
@@ -288,6 +300,9 @@ function App() {
                         savedModels={settings.savedModels}
                         onSavedModelsChange={settings.setSavedModels}
                         catalog={catalog}
+                        promptPrefs={settings.promptPrefs}
+                        onPromptPrefsChange={settings.setPromptPrefs}
+                        musicExtras={<CustomInstructions value={settings.customInstructions} onChange={settings.setCustomInstructions} />}
                         onClose={() => setShowSettings(false)}
                     />
                 )}

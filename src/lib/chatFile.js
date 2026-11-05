@@ -8,7 +8,7 @@ import { MAX_REVISIONS, REVISION_ORIGINS } from './revisions';
  *
  * Version 3 (current): as version 2, and chats may carry their pattern revisions
  * (`revisions`, `selectedRevisionId`, `previousRevisionId`) and messages their `id`, `status`,
- * `finishReason`, `error`, `usage` and `revisionId`. Earlier versions of the app import a version 3
+ * `finishReason`, `error`, `usage`, `revisionId` and `promptVersion`. Earlier versions of the app import a version 3
  * file with a "newer version" note and keep the messages.
  * Version 2: `{ format, version: 2, exportedAt, chats: [...] }`, for one chat or many.
  * Before version 2 the app wrote a bare chat object (export of one chat) or a bare array of chats
@@ -84,6 +84,8 @@ function cleanMessage(m) {
     const usage = cleanUsage(m.usage);
     if (usage) message.usage = usage;
     if (isId(m.revisionId)) message.revisionId = m.revisionId;
+    const promptVersion = shortText(m.promptVersion, 20);
+    if (promptVersion && /^[0-9A-Za-z.+-]+$/.test(promptVersion)) message.promptVersion = promptVersion;
     if (m.stopped === true) message.stopped = true;
     if (m.truncated === true) message.truncated = true;
     return message;

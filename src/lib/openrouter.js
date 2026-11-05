@@ -58,22 +58,23 @@ function errorInfo(err, fallback) {
  * @param {{ role: string, content: string }[]} conversation the whole conversation so far,
  *   including the user's newest message as its last entry (it is not appended again here)
  * @param {string} [modelName] display name used in the attribution line
- * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void }} [options]
+ * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void, systemPrompt?: string }} [options]
  *   `signal` stops the request; the text received so far is then returned with status `aborted`.
  *   `onText` is called with the full reply text every time it grows.
+ *   `systemPrompt` is the composed prompt for this request (default: the full SYSTEM_PROMPT).
  * @returns {Promise<GenerationResult>}
  *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases);
  *   `modelLabel` is what to show for it: the concrete model for an alias, the display name otherwise.
  *   `stopped` and `truncated` mirror `status` for code (and stored chats) that predate `status`.
  */
-export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText } = {}) {
+export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText, systemPrompt = SYSTEM_PROMPT } = {}) {
     const cleanApiKey = apiKey?.trim();
     if (!cleanApiKey) {
         throw new Error("API Key is required");
     }
 
     const messages = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         ...conversation
     ];
 

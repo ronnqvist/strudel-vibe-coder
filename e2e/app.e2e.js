@@ -494,6 +494,63 @@ test('when the chats cannot be saved, the user is told and can export them', asy
     await expect(warning).toHaveCount(0);
 });
 
+test.describe('the system prompt is composed per request (#8)', () => {
+    test('visuals follow the setting; the reply records the prompt version', async ({ page }) => {
+        const { chatRequests } = await mockNetwork(page);
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+        await page.goto('./');
+
+        await page.getByLabel('Message', { exact: true }).fill('acid techno bass');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('status')).toHaveText(/Reply received/);
+        let system = chatRequests[0].body.messages[0];
+        expect(system.role).toBe('system');
+        expect(system.content).toContain('# Output Contract');
+        expect(system.content).toContain('# Samples and Drum Machines'); // a first draft gets drums and synths
+        expect(system.content).not.toContain('# Hydra Visuals'); // default: visuals only when asked
+        expect(system.content).toMatch(/Add Hydra visuals only when the user asks/);
+
+        await page.getByRole('button', { name: 'Settings' }).click();
+        await page.getByLabel('Hydra visuals').selectOption('always');
+        await page.getByLabel('Comments and explanations').selectOption('teaching');
+        await page.keyboard.press('Escape');
+        expect(JSON.parse(await page.evaluate(() => localStorage.getItem('openrouter_prompt_prefs')))).toEqual({ visuals: 'always', explanation: 'teaching' });
+
+        await page.getByLabel('Message', { exact: true }).fill('faster');
+        await page.keyboard.press('Enter');
+        await expect.poll(() => chatRequests.length).toBe(2);
+        system = chatRequests[1].body.messages[0];
+        expect(system.content).toContain('# Hydra Visuals');
+        expect(system.content).toMatch(/someone new to live coding/);
+
+        const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats'))[0].messages);
+        expect(saved.filter(m => m.role === 'assistant').every(m => m.promptVersion === '2.0.0')).toBe(true);
+    });
+});
+
+test('custom music instructions are added to the prompt, and can be reset, exported and imported', async ({ page }) => {
+    const { chatRequests } = await mockNetwork(page);
+    await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+    await page.goto('./');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Configuration' });
+    await dialog.getByText('Advanced: your own music instructions').click();
+    await dialog.getByLabel('Your own music instructions').fill('Prefer minor keys and slow tempos.');
+    const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Export' }).click()]);
+    expect(download.suggestedFilename()).toBe('strudel-music-instructions.txt');
+    await dialog.getByRole('button', { name: 'Reset' }).click();
+    await expect(dialog.getByLabel('Your own music instructions')).toHaveValue('');
+    await dialog.locator('input[type=file][accept=".txt,text/plain"]').setInputFiles({ name: 'mine.txt', mimeType: 'text/plain', buffer: Buffer.from('Prefer minor keys and slow tempos.') });
+    await expect(dialog.getByLabel('Your own music instructions')).toHaveValue('Prefer minor keys and slow tempos.');
+    await page.keyboard.press('Escape');
+
+    await page.getByLabel('Message', { exact: true }).fill('x');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status')).toHaveText(/Reply received/);
+    const system = chatRequests[0].body.messages[0].content;
+    expect(system.endsWith("# The User's Own Music Instructions\nFollow these where they do not conflict with the output contract and the Strudel facts above:\nPrefer minor keys and slow tempos.")).toBe(true);
+});
+
 test('pressing Enter twice quickly sends one request', async ({ page }) => {
     await mockNetwork(page);
     const counter = await delayedReply(page, '```js\ns("bd")\n```', { ms: 800 });
