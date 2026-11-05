@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: MIT
 import { generateId } from './utils';
+import { STATUSES } from './generation';
+import { MAX_REVISIONS, REVISION_ORIGINS } from './revisions';
 
 /**
  * Chat backup files.
  *
- * Version 2 (current): `{ format, version: 2, exportedAt, chats: [...] }`, for one chat or many.
+ * Version 3 (current): as version 2, and chats may carry their pattern revisions
+ * (`revisions`, `selectedRevisionId`, `previousRevisionId`) and messages their `id`, `status`,
+ * `finishReason`, `error`, `usage` and `revisionId`. Earlier versions of the app import a version 3
+ * file with a "newer version" note and keep the messages.
+ * Version 2: `{ format, version: 2, exportedAt, chats: [...] }`, for one chat or many.
  * Before version 2 the app wrote a bare chat object (export of one chat) or a bare array of chats
  * (export of all chats). Both still import.
  *
@@ -13,7 +19,7 @@ import { generateId } from './utils';
  * import can never overwrite or merge with an existing chat.
  */
 export const CHAT_FILE_FORMAT = 'strudel-vibe-coder-chats';
-export const CHAT_FILE_VERSION = 2;
+export const CHAT_FILE_VERSION = 3;
 
 /** Largest backup file the import accepts. Chats live in localStorage, which holds only a few MB anyway. */
 export const MAX_CHAT_FILE_BYTES = 20 * 1024 * 1024;
@@ -52,30 +58,93 @@ export function exportFileName(chats, { all = false, now = new Date() } = {}) {
 }
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isId = (v) => typeof v === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(v);
+const shortText = (v, max) => (typeof v === 'string' ? v.slice(0, max) : undefined);
+
+function cleanUsage(u) {
+    if (!isObject(u)) return undefined;
+    const usage = {};
+    for (const key of ['prompt_tokens', 'completion_tokens', 'total_tokens', 'cost']) {
+        if (typeof u[key] === 'number' && Number.isFinite(u[key])) usage[key] = u[key];
+    }
+    return Object.keys(usage).length ? usage : undefined;
+}
 
 function cleanMessage(m) {
     if (!isObject(m) || !ROLES.has(m.role) || typeof m.content !== 'string') return null;
     const message = { role: m.role, content: m.content };
+    if (isId(m.id)) message.id = m.id;
     if (typeof m.code === 'string' || m.code === null) message.code = m.code;
     if (typeof m.model === 'string') message.model = m.model;
+    if (STATUSES.includes(m.status)) message.status = m.status;
+    const finishReason = shortText(m.finishReason, 40);
+    if (finishReason) message.finishReason = finishReason;
+    const error = shortText(m.error, 1000);
+    if (error) message.error = error;
+    const usage = cleanUsage(m.usage);
+    if (usage) message.usage = usage;
+    if (isId(m.revisionId)) message.revisionId = m.revisionId;
     if (m.stopped === true) message.stopped = true;
     if (m.truncated === true) message.truncated = true;
     return message;
 }
 
+function cleanRevision(r, now) {
+    if (!isObject(r) || !isId(r.id) || typeof r.code !== 'string' || !REVISION_ORIGINS.includes(r.origin)) return null;
+    const revision = { id: r.id, code: r.code, origin: r.origin };
+    if (isId(r.messageId)) revision.messageId = r.messageId;
+    const model = shortText(r.model, 200);
+    if (model) revision.model = model;
+    if (r.repaired === true) revision.repaired = true;
+    revision.createdAt = typeof r.createdAt === 'string' && !Number.isNaN(Date.parse(r.createdAt)) ? r.createdAt : now.toISOString();
+    return revision;
+}
+
+/** The revision fields of a chat, cleaned: unknown or duplicate entries dropped, selection kept only if it exists. */
+function cleanRevisions(c, now) {
+    if (!Array.isArray(c.revisions)) return {};
+    const seen = new Set();
+    const revisions = [];
+    for (const raw of c.revisions) {
+        const r = cleanRevision(raw, now);
+        if (r && !seen.has(r.id)) {
+            seen.add(r.id);
+            revisions.push(r);
+        }
+    }
+    const kept = revisions.slice(-MAX_REVISIONS);
+    const ids = new Set(kept.map(r => r.id));
+    for (const key of ['selectedRevisionId', 'previousRevisionId']) {
+        // keep a selected or previous revision even when it is older than the last MAX_REVISIONS
+        const r = revisions.find(x => x.id === c[key]);
+        if (r && !ids.has(r.id)) { kept.unshift(r); ids.add(r.id); }
+    }
+    if (kept.length === 0) return {};
+    const result = { revisions: kept };
+    if (ids.has(c.selectedRevisionId)) result.selectedRevisionId = c.selectedRevisionId;
+    if (ids.has(c.previousRevisionId)) result.previousRevisionId = c.previousRevisionId;
+    return result;
+}
+
 function cleanChat(c, now, makeId) {
     if (!isObject(c) || !Array.isArray(c.messages)) return null;
     const messages = [];
+    const messageIds = new Set();
     let skipped = 0;
     for (const m of c.messages) {
         const clean = cleanMessage(m);
-        if (clean) messages.push(clean);
-        else skipped++;
+        if (!clean) {
+            skipped++;
+            continue;
+        }
+        if (clean.id && messageIds.has(clean.id)) delete clean.id; // a fresh one is assigned on import
+        if (clean.id) messageIds.add(clean.id);
+        messages.push(clean);
     }
     const name = typeof c.name === 'string' ? c.name.trim().slice(0, MAX_NAME_LENGTH) : '';
     const created = typeof c.createdAt === 'string' && !Number.isNaN(Date.parse(c.createdAt)) ? c.createdAt : now.toISOString();
     return {
-        chat: { id: makeId(), name: name || `Imported ${now.toLocaleTimeString()}`, messages, createdAt: created },
+        chat: { id: makeId(), name: name || `Imported ${now.toLocaleTimeString()}`, messages, createdAt: created, ...cleanRevisions(c, now) },
         skippedMessages: skipped,
     };
 }

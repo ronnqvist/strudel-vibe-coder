@@ -5,7 +5,7 @@ import MessageItem from './MessageItem';
 import { STARTER_PROMPTS } from '../config';
 
 /** Scrolling message column: empty state, messages, and the "generating" indicator. */
-const MessageList = ({ messages, isLoading, streamingText, streamingModel, onPickPrompt, editing, onEditContentChange, onStartEdit, onCancelEdit, onSaveEdit, onLoadCode }) => {
+const MessageList = ({ messages, isLoading, streamingText, streamingModel, onPickPrompt, editing, onEditContentChange, onStartEdit, onCancelEdit, onSaveEdit, onLoadCode, selectedMessageId, onRetry }) => {
     const containerRef = useRef(null);
 
     useEffect(() => {
@@ -36,8 +36,10 @@ const MessageList = ({ messages, isLoading, streamingText, streamingModel, onPic
             )}
             {messages.map((msg, idx) => (
                 <MessageItem
-                    key={idx}
+                    key={msg.id ?? idx}
                     message={msg}
+                    onStage={Boolean(selectedMessageId) && msg.id === selectedMessageId}
+                    onRetry={idx === messages.length - 1 ? onRetry : undefined}
                     isEditing={editing.index === idx}
                     editContent={editing.content}
                     onEditContentChange={onEditContentChange}

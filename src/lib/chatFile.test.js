@@ -58,7 +58,7 @@ describe('parseChatFile: current format', () => {
         const file = buildExport(chats, NOW);
         expect(file).toMatchObject({ format: CHAT_FILE_FORMAT, version: CHAT_FILE_VERSION, exportedAt: '2026-11-04T12:00:00.000Z' });
         const result = parseChatFile(JSON.stringify(file), opts());
-        expect(result.version).toBe(2);
+        expect(result.version).toBe(CHAT_FILE_VERSION);
         expect(result.chats.map(c => ({ name: c.name, messages: c.messages, createdAt: c.createdAt })))
             .toEqual(chats.map(c => ({ name: c.name, messages: c.messages, createdAt: c.createdAt })));
     });
@@ -144,5 +144,54 @@ describe('exportFileName / describeImport', () => {
         const base = { skippedChats: 0, skippedMessages: 0, warnings: [] };
         expect(describeImport({ ...base, chats: [{}] })).toBe('Imported 1 chat.');
         expect(describeImport({ ...base, chats: [{}, {}], skippedChats: 1 })).toBe('Imported 2 chats. Skipped 1 chat that could not be read.');
+    });
+});
+
+describe('parseChatFile: format 3 (pattern revisions)', () => {
+    const revisionChat = {
+        id: 'a', name: 'with revisions', createdAt: '2026-11-05T10:00:00.000Z',
+        messages: [
+            { id: 'm1', role: 'user', content: 'beat' },
+            { id: 'm2', role: 'assistant', content: '```js\ns("bd")\n```', code: 's("bd")', model: 'M', status: 'completed', finishReason: 'stop', usage: { total_tokens: 12, cost: 0.001, junk: 'x' }, revisionId: 'r1' },
+            { id: 'm3', role: 'assistant', content: 'part', model: 'M', status: 'interrupted', error: 'gone' },
+        ],
+        revisions: [
+            { id: 'r1', code: 's("bd")', origin: 'reply', messageId: 'm2', model: 'M', createdAt: '2026-11-05T10:01:00.000Z' },
+            { id: 'r2', code: 's("bd").gain(.5)', origin: 'edited', repaired: true, createdAt: '2026-11-05T10:02:00.000Z' },
+        ],
+        selectedRevisionId: 'r2',
+        previousRevisionId: 'r1',
+    };
+
+    it('round-trips revisions, the selection, and the new message fields', () => {
+        const { chats, version } = parseChatFile(JSON.stringify(buildExport([revisionChat], NOW)), opts());
+        expect(version).toBe(3);
+        const [c] = chats;
+        expect(c.revisions).toEqual(revisionChat.revisions);
+        expect(c.selectedRevisionId).toBe('r2');
+        expect(c.previousRevisionId).toBe('r1');
+        expect(c.messages[1]).toEqual({ ...revisionChat.messages[1], usage: { total_tokens: 12, cost: 0.001 } });
+        expect(c.messages[2]).toMatchObject({ status: 'interrupted', error: 'gone' });
+    });
+
+    it('drops invalid revisions and a selection that points nowhere', () => {
+        const bad = { ...revisionChat, revisions: [{ id: 'r1', code: 42, origin: 'reply' }, { id: '../x', code: 'c', origin: 'reply' }, { id: 'r3', code: 'c', origin: 'magic' }], selectedRevisionId: 'r1' };
+        const [c] = parseChatFile(JSON.stringify(bad), opts()).chats;
+        expect(c.revisions).toBeUndefined();
+        expect(c.selectedRevisionId).toBeUndefined();
+    });
+
+    it('ignores an unknown status and an invalid message id', () => {
+        const odd = { name: 'n', messages: [{ id: 'has space', role: 'assistant', content: 'x', status: 'weird' }] };
+        const [c] = parseChatFile(JSON.stringify(odd), opts()).chats;
+        expect(c.messages[0]).toEqual({ role: 'assistant', content: 'x' });
+    });
+
+    it('a version 2 file still imports, without revisions', () => {
+        const v2 = { format: CHAT_FILE_FORMAT, version: 2, exportedAt: NOW.toISOString(), chats: [legacyChat] };
+        const result = parseChatFile(JSON.stringify(v2), opts());
+        expect(result.version).toBe(2);
+        expect(result.warnings).toEqual([]);
+        expect(result.chats[0].revisions).toBeUndefined();
     });
 });

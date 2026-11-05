@@ -12,6 +12,8 @@
  * in any other way, the pattern is loaded as before, so this check can never block playback.
  */
 
+import { repairTypography } from './codeRepair';
+
 const PARSE_OPTIONS = {
     ecmaVersion: 'latest',
     sourceType: 'script',
@@ -43,4 +45,29 @@ export async function patternSyntaxError(code, deps = {}) {
     } catch (error) {
         return error instanceof SyntaxError ? error.message : null;
     }
+}
+
+/**
+ * Decide what exactly goes into the player for `code`.
+ *
+ * 1. Code that parses is used exactly as it is (typographic characters inside its strings and
+ *    comments included).
+ * 2. Otherwise a syntax-aware typography repair is tried (curly quotes used as delimiters, dashes
+ *    used as a minus; see codeRepair.js). It is used only if the repaired code parses.
+ * 3. Otherwise the code is refused with the original's syntax error.
+ *
+ * The returned `code` is the string that was validated; store, encode and play exactly that.
+ *
+ * @param {string} code
+ * @param {{ parse?: (code: string, options: object) => unknown }} [deps] for tests
+ * @returns {Promise<{ ok: boolean, code: string, repaired: boolean, error: string | null }>}
+ */
+export async function preparePattern(code, deps = {}) {
+    const error = await patternSyntaxError(code, deps);
+    if (!error) return { ok: true, code, repaired: false, error: null };
+    const repaired = repairTypography(code);
+    if (repaired !== code && !(await patternSyntaxError(repaired, deps))) {
+        return { ok: true, code: repaired, repaired: true, error: null };
+    }
+    return { ok: false, code, repaired: false, error };
 }

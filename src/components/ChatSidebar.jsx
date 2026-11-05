@@ -9,6 +9,8 @@ const iconButton = 'p-2 hover:bg-cyber-gray rounded transition-colors';
 const ChatSidebar = ({
     chats,
     currentChatId,
+    news,
+    busyChatIds,
     onSelect,
     onNew,
     onImportFile,
@@ -67,6 +69,8 @@ const ChatSidebar = ({
             <ChatList
                 chats={chats}
                 currentChatId={currentChatId}
+                news={news}
+                busyChatIds={busyChatIds}
                 onSelect={onSelect}
                 onRename={onRename}
                 onExport={onExport}

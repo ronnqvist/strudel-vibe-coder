@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest';
-import { patternSyntaxError } from './patternCheck';
+import { patternSyntaxError, preparePattern } from './patternCheck';
 
 describe('patternSyntaxError', () => {
     it('accepts the forms Strudel code uses', async () => {
@@ -30,5 +30,30 @@ describe('patternSyntaxError', () => {
     it('fails open when the parser breaks in a way that is not a syntax error', async () => {
         const broken = () => { throw new TypeError('parser bug'); };
         expect(await patternSyntaxError('s("bd")', { parse: broken })).toBeNull();
+    });
+});
+
+describe('preparePattern', () => {
+    it('returns valid code exactly as it is, even with typographic characters in strings and comments', async () => {
+        const code = 'const label = "He said “hi”"; s("A–B") // it’s — fine';
+        expect(await preparePattern(code)).toEqual({ ok: true, code, repaired: false, error: null });
+    });
+
+    it('repairs curly quotes used as string delimiters, and says so', async () => {
+        expect(await preparePattern('s(“bd sd”).bank(‘RolandTR909’)')).toEqual({ ok: true, code: 's("bd sd").bank(\'RolandTR909\')', repaired: true, error: null });
+    });
+
+    it('refuses code that does not parse even after repair, with the error of the original', async () => {
+        const result = await preparePattern('s("bd sd"');
+        expect(result).toMatchObject({ ok: false, code: 's("bd sd"', repaired: false });
+        expect(result.error).toMatch(/Unexpected token/);
+    });
+
+    it('the code it returns is the code that is validated: it always parses when ok', async () => {
+        for (const input of ['s(“bd”)', 'note(“c e g”).gain(1 – 0.5)', '$: s("hh*8")']) {
+            const { ok, code } = await preparePattern(input);
+            expect(ok).toBe(true);
+            expect(await patternSyntaxError(code)).toBeNull();
+        }
     });
 });

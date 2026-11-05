@@ -9,7 +9,11 @@ Describe music in plain language and get live-coded [Strudel](https://strudel.cc
 
 1. You bring your own [OpenRouter](https://openrouter.ai/) API key and pick a model. Everything runs in your browser; there is no server of ours.
 2. You describe a sound ("acid techno bass"). The reply is streamed into the chat, and you can stop it at any time (button or Esc).
-3. The code from the reply is loaded into the player, which is strudel.cc shown in an iframe. Press play there.
+3. When the reply is complete and its code is valid JavaScript, the code is loaded into the player, which is strudel.cc shown in an iframe. Press play there. A reply that was cut off, interrupted, refused or failed is marked in the chat and does not replace the pattern that is playing.
+4. Each chat has its own pattern. Switching chats shows that chat's pattern (and stops the music that was playing), and a reply that finishes in another chat stays in that chat. **Use this version** puts an earlier reply back in the player, and **Restore previous** undoes the last change.
+5. Your next message asks the model to change the pattern that is in the player. Edits you make in the Strudel editor are not sent back to this app (it cannot read the player, by design). To continue from them, copy the code from the player and use **Use edited code**. **Fix an error** sends an error message from the player to the model.
+
+The code reaches the player exactly as it is shown in the chat. Only when a reply's code does not parse because the model used typographic quotes or dashes as JavaScript punctuation, the app straightens them, checks that the result parses, and says so.
 
 The default model is `~x-ai/grok-latest`. The suggested models (`~anthropic/claude-opus-latest`, `~openai/gpt-sol-latest`, `~deepseek/deepseek-flash-latest`) are OpenRouter aliases that always point at the newest version of a family. Settings has a searchable list of every OpenRouter model, and you can type any model id.
 
@@ -19,11 +23,11 @@ The default model is `~x-ai/grok-latest`. The suggested models (`~anthropic/clau
 - **Remember key on this device** (settings, on by default) can be turned off: the key then lives in memory for that tab only. **Forget key** removes it everywhere.
 - **Temporary key in the address:** open `https://ronnqvist.github.io/strudel-vibe-coder/#sk-or-v1-YOUR-KEY`. The key is used for that visit only, is never stored, and is removed from the address bar immediately. Treat such a link like a password: anyone who has it can spend your credits, and it stays in whatever you used to share it (chat history, bookmarks, the history of the browser you first opened it in). Use a key with a spending limit.
 - The player is `strudel.cc`. The code is in the URL fragment, which browsers do not send to servers, but strudel.cc's own page then runs it and loads sounds and Hydra from its own hosts.
-- Chats can be exported and imported as JSON files (versioned; files from older versions still import). Browsers allow a few MB of localStorage in total, so export large chats instead of keeping everything.
+- Chats can be exported and imported as JSON files (versioned; files from older versions still import). Browsers allow a few MB of localStorage in total, so export large chats instead of keeping everything. If saving fails, the app says so and offers an export.
 
 ## Development
 
-Needs Node 20.19+ or 22.12+.
+Needs Node 22.12+ (as in CI). `CLAUDE.md` summarises the architecture, the licensing rules, the storage keys and the migration rules.
 
 ```bash
 npm install

@@ -7,6 +7,7 @@
  * - The base64 payload is decoded as UTF-8. Non-ASCII text, including emoji,
  *   round-trips unchanged; base64 of Latin-1 bytes does not (ä/ö/å turn into U+FFFD).
  * - A URI-encoded payload (`+`, `/`, `=` escaped) is accepted.
+ * - The encoding is lossless for any JavaScript string that is valid UTF-16.
  * - Chromium refuses to navigate an iframe whose URL exceeds 2 MiB
  *   (the frame ends up at `about:blank#blocked`); 1.9 million characters still loaded.
  */
@@ -15,21 +16,6 @@ export const STRUDEL_ORIGIN = 'https://strudel.cc';
 
 /** Longest iframe URL we hand to the browser. Chromium's hard limit is 2,097,152 characters. */
 export const MAX_URL_LENGTH = 2_000_000;
-
-/**
- * Replace typographic punctuation that LLMs like to emit with its ASCII form.
- * Curly quotes inside code are syntax errors in JavaScript, so this is applied
- * to the whole text, comments included. All other characters are kept.
- * @param {string} code
- * @returns {string}
- */
-export function normalizeTypography(code) {
-    if (!code) return '';
-    return code
-        .replace(/[‘’]/g, "'") // single smart quotes
-        .replace(/[“”]/g, '"') // double smart quotes
-        .replace(/[–—]/g, '-'); // en and em dashes
-}
 
 function bytesToBase64(bytes) {
     let binary = '';
@@ -67,12 +53,13 @@ export function decodeStrudelHash(hash) {
 }
 
 /**
- * Full strudel.cc URL for the given code, after typography normalisation.
+ * Full strudel.cc URL for exactly the given code (lossless: decoding the fragment gives `code` back).
+ * Any repair of the code happens before validation (preparePattern in patternCheck.js), never here.
  * @param {string} code
  * @returns {string}
  */
 export function strudelUrl(code) {
-    return `${STRUDEL_ORIGIN}/#${encodeStrudelHash(normalizeTypography(code))}`;
+    return `${STRUDEL_ORIGIN}/#${encodeStrudelHash(code)}`;
 }
 
 /**

@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-/** Server-sent-events body in the shape OpenRouter streams. */
+/**
+ * Server-sent-events body in the shape OpenRouter streams.
+ * `finishReason: null` ends the body after the content, with no final chunk and no [DONE]
+ * (a connection that closed early).
+ */
 export function sseBody(content, model = 'vendor/resolved-1', finishReason = 'stop') {
     const chunk = { model, choices: [{ delta: { content } }] };
+    if (finishReason === null) return `data: ${JSON.stringify(chunk)}\n\n`;
     const end = { model, choices: [{ delta: {}, finish_reason: finishReason }] };
     return `data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(end)}\n\ndata: [DONE]\n\n`;
 }
@@ -28,7 +33,7 @@ const MODELS_FIXTURE = {
  * - OpenRouter's model list and chat endpoint are mocked; chat requests are recorded
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ reply?: string, model?: string, finishReason?: string }} [options] what the mocked model answers
+ * @param {{ reply?: string, model?: string, finishReason?: string | null }} [options] what the mocked model answers
  * @returns {{ chatRequests: { body: any, headers: Record<string, string> }[] }}
  */
 export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', model = 'vendor/resolved-1', finishReason = 'stop' } = {}) {
@@ -60,4 +65,19 @@ export async function seedStorage(page, entries) {
         localStorage.setItem('__seeded', '1');
         for (const [key, value] of Object.entries(data)) localStorage.setItem(key, value);
     }, [entries]);
+}
+
+/**
+ * Make the mocked model answer after `ms` milliseconds (register after mockNetwork; later routes win).
+ * @returns {{ requests: number }} counts the chat requests
+ */
+export async function delayedReply(page, reply, { ms = 1500, model = 'mock-model', finishReason = 'stop' } = {}) {
+    const counter = { requests: 0 };
+    await page.route('https://openrouter.ai/api/v1/chat/completions', async (route) => {
+        counter.requests++;
+        await new Promise((resolve) => setTimeout(resolve, ms));
+        // the page may have aborted the request meanwhile
+        await route.fulfill({ contentType: 'text/event-stream', headers: { 'access-control-allow-origin': '*' }, body: sseBody(reply, model, finishReason) }).catch(() => {});
+    });
+    return counter;
 }

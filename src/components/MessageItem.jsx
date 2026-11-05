@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import React from 'react';
-import { Terminal, Import, X, Edit2, Save } from 'lucide-react';
+import { Terminal, Play, X, Edit2, Save, RotateCcw } from 'lucide-react';
+import { messageStatus, statusBadge } from '../lib/generation';
 
 const MessageItem = ({
     message,
@@ -11,8 +12,12 @@ const MessageItem = ({
     onCancelEdit,
     onSaveEdit,
     onLoadCode,
+    onStage = false,
+    onRetry,
     readOnly = false,
-}) => (
+}) => {
+    const badge = readOnly ? null : statusBadge(messageStatus(message));
+    return (
     <div className={`flex ${isEditing ? 'w-full' : (message.role === 'user' ? 'justify-end' : 'justify-start')}`}>
         <div className={`${isEditing ? 'w-full' : 'max-w-[80%]'} p-3 rounded-lg ${message.role === 'user'
             ? 'bg-cyber-gray text-white border border-cyber-gray'
@@ -40,8 +45,8 @@ const MessageItem = ({
                                     <Terminal className="w-3 h-3" aria-hidden="true" />
                                     <span className="font-bold">Generated Code</span>
                                     {message.model && <span className="text-[10px] text-gray-400 ml-2 border border-gray-700 px-1 rounded">{message.model}</span>}
-                                    {message.stopped && <span className="text-[10px] text-red-400 border border-red-900 px-1 rounded">stopped</span>}
-                                    {message.truncated && <span className="text-[10px] text-yellow-300 border border-yellow-800 px-1 rounded" title="The model stopped at its length limit; the code may be incomplete">cut off</span>}
+                                    {badge && <span className="text-[10px] text-yellow-300 border border-yellow-800 px-1 rounded" title={badge.title}>{badge.label}</span>}
+                                    {onStage && <span className="text-[10px] text-green-300 border border-green-800 px-1 rounded" title="This version is the pattern in the player">on stage</span>}
                                 </div>
                                 {!readOnly && <div className="flex gap-1">
                                     <button
@@ -54,16 +59,26 @@ const MessageItem = ({
                                     </button>
                                     <button
                                         onClick={onLoadCode}
-                                        aria-label="Import code into the player"
+                                        aria-label="Use this version in the player"
                                         className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
-                                        title="Run in Player"
+                                        title="Put this version of the pattern in the player"
                                     >
-                                        <Import className="w-3 h-3" aria-hidden="true" />
-                                        Import
+                                        <Play className="w-3 h-3" aria-hidden="true" />
+                                        Use this version
                                     </button>
                                 </div>}
                             </div>
                             <pre className="whitespace-pre-wrap break-words text-sm">{message.content}</pre>
+                            {message.error && <p className="mt-2 text-red-400 text-xs">Error: {message.error}</p>}
+                            {onRetry && (
+                                <button
+                                    onClick={onRetry}
+                                    className="mt-2 flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded border border-cyber-cyan/30"
+                                >
+                                    <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                                    Retry
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="relative group">
@@ -83,5 +98,6 @@ const MessageItem = ({
         </div>
     </div>
 );
+};
 
 export default MessageItem;

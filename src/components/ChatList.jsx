@@ -7,7 +7,7 @@ import { formatDate } from '../lib/utils';
 const actionsClass = 'flex items-center pr-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity';
 
 /** The list of chats, with inline rename. One implementation for both the normal and the rename view. */
-const ChatList = ({ chats, currentChatId, onSelect, onRename, onExport, onDelete }) => {
+const ChatList = ({ chats, currentChatId, news, busyChatIds = [], onSelect, onRename, onExport, onDelete }) => {
     const [editingId, setEditingId] = useState(null);
     const [editName, setEditName] = useState('');
 
@@ -52,9 +52,23 @@ const ChatList = ({ chats, currentChatId, onSelect, onRename, onExport, onDelete
                                 aria-current={currentChatId === chat.id ? 'true' : undefined}
                                 className="flex-1 min-w-0 text-left p-3 rounded-lg"
                             >
-                                <span className="block font-bold truncate">{chat.name}</span>
+                                <span className="block font-bold truncate">
+                                    {chat.name}
+                                    {news?.has(chat.id) && chat.id !== currentChatId && (
+                                        <>
+                                            <span aria-hidden="true" className="inline-block w-2 h-2 ml-2 rounded-full bg-cyber-neon align-middle" />
+                                            <span className="sr-only"> (new pattern)</span>
+                                        </>
+                                    )}
+                                </span>
                                 <span className="text-xs text-gray-400 flex gap-2">
                                     <span>{chat.messages.length} msgs</span>
+                                    {busyChatIds.includes(chat.id) && (
+                                        <>
+                                            <span aria-hidden="true">•</span>
+                                            <span className="text-cyber-neon">writing a reply…</span>
+                                        </>
+                                    )}
                                     <span aria-hidden="true">•</span>
                                     <span>{formatDate(chat.createdAt)}</span>
                                 </span>
