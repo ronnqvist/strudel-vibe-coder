@@ -224,18 +224,37 @@ test('a reply cut off at the length limit is marked and not loaded, even when it
     expect(await page.locator('iframe').getAttribute('src')).toBe(before);
 });
 
-test('keyboard users enter the player with a button, and the iframe is not a Tab trap', async ({ page }) => {
+test('"Enter player" is a visible link that opens the current pattern on strudel.cc; the iframe is not a Tab trap', async ({ page, context }) => {
     await mockNetwork(page);
+    await seedStorage(page, { openrouter_current_code: '$: s("bd*4")' });
     await page.goto('./');
-    await expect(page.locator('iframe')).toHaveAttribute('tabindex', '-1');
-    const enter = page.getByRole('button', { name: 'Enter player' });
-    let reached = false;
-    for (let i = 0; i < 25 && !reached; i++) {
+    const frame = page.locator('iframe');
+    await expect(frame).toHaveAttribute('tabindex', '-1');
+    await expect(frame).toHaveAttribute('title', 'Strudel live-coding REPL (strudel.cc)');
+
+    // visible without any keyboard use, and a link
+    const enter = page.getByRole('link', { name: 'Enter player (opens in a new tab)' });
+    await expect(enter).toBeVisible();
+    await expect(enter).toHaveAttribute('target', '_blank');
+    const href = await enter.getAttribute('href');
+    expect(href.startsWith('https://strudel.cc/#')).toBe(true);
+    expect(href).toBe(await frame.getAttribute('src'));
+    expect(decodeStrudelSrc(href)).toBe('$: s("bd*4")');
+
+    // a plain click opens that exact pattern in a new tab; the in-page player stays
+    const [popup] = await Promise.all([context.waitForEvent('page'), enter.click()]);
+    await popup.waitForLoadState();
+    expect(popup.url()).toBe(href);
+    await popup.close();
+    await expect(frame).toHaveCount(1);
+
+    // Tab reaches the link and moves on through the page without ever focusing the iframe
+    const seen = [];
+    for (let i = 0; i < 30; i++) {
         await page.keyboard.press('Tab');
-        reached = await enter.evaluate(el => el === document.activeElement);
+        seen.push(await page.evaluate(() => document.activeElement?.tagName + ':' + (document.activeElement?.textContent || '').trim().slice(0, 30)));
     }
-    expect(reached).toBe(true);
-    await expect(enter).toBeVisible(); // shown while it has focus
-    await page.keyboard.press('Enter');
-    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+    expect(seen.some(s => s.startsWith('A:Enter player'))).toBe(true);
+    expect(seen.some(s => s.startsWith('IFRAME'))).toBe(false);
+    expect(new Set(seen).size).toBeGreaterThan(3);
 });
