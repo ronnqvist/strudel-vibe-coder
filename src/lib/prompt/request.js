@@ -4,7 +4,7 @@
  * request context, attached to the newest user message) and a bounded conversation history.
  */
 
-const CODE_BLOCK = /(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n\2[ \t]*(?=\n|$)/g;
+const CODE_BLOCK = /(^|\r?\n)(`{3,}|~{3,})[^\r\n]*\r?\n[\s\S]*?\r?\n\2[ \t]*(?=\r?\n|$)/g;
 
 /**
  * Put the pattern on this chat's stage in front of the newest user message, in the request only

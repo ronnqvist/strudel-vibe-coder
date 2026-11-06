@@ -524,7 +524,7 @@ test.describe('the system prompt is composed per request (#8)', () => {
         expect(system.content).toMatch(/someone new to live coding/);
 
         const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats'))[0].messages);
-        expect(saved.filter(m => m.role === 'assistant').every(m => m.promptVersion === '2.0.0')).toBe(true);
+        expect(saved.filter(m => m.role === 'assistant').every(m => m.promptVersion === '2.0.1')).toBe(true);
     });
 });
 
