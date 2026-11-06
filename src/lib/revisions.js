@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { generateId } from './utils';
+import { stripAttribution } from './extractCode';
 
 /**
  * Pattern revisions: the patterns a chat has put on the stage.
@@ -123,8 +124,12 @@ export function adoptLegacyCode(chat, code, options) {
     return addRevision(chat, { code, origin: 'legacy' }, options).chat;
 }
 
-/** The code to tell the model about as "the pattern in the player", or '' (the starter pattern is not the user's). */
+/**
+ * The code to tell the model about as "the pattern in the player", or ''. The starter pattern is
+ * not the user's (it is left out), and the app's attribution line is left out, so that a model
+ * revising another model's pattern does not copy the old attribution.
+ */
 export function patternForRequest(chat) {
     const revision = selectedRevision(chat);
-    return revision && revision.origin !== 'starter' ? revision.code : '';
+    return revision && revision.origin !== 'starter' ? stripAttribution(revision.code) : '';
 }
