@@ -6,7 +6,7 @@ This brief is complete on its own: you don't need access to any repository. Wher
 
 - Upstream: https://github.com/ronnqvist/strudel-vibe-coder (MIT, Copyright (c) 2025-2026 Simon Rönnqvist).
 - The **previous sync** was based on upstream commit `250786e6cbd6ba923d846a186ddfa948574784c9`. This brief is a **delta** from that commit.
-- The **implementation** this brief describes is upstream commit `d85e52d9990526c9a7ddc1ff94f4a927ee888f75`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
+- The **implementation** this brief describes is upstream commit `43aa706f7205c20a67f38f597c43f2063e5cf361`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
 - Strudel is a separate AGPL-3.0 project. The app opens https://strudel.cc in an iframe. Do not bundle Strudel code, do not add `@strudel/embed`, and do not read or script the iframe. All of that is unchanged from the previous sync.
 
 The downstream app is its own codebase (TanStack Start). This is not a copy-over: keep its structure, and port the behaviour and the modules below.
@@ -66,6 +66,13 @@ Error: …` count as errors (section 6).
    - Two prompt examples didn't change the pitch (`.add` after `n()`, and `.off` after `.scale()`). They are corrected and checked in strudel.cc (`PROMPT_VERSION` 2.0.1).
    - The samples module is chosen for instrument requests.
    - Escape and Tab keep working in a dialog after its focused button disappears. The Chats panel is modal. Small text meets 4.5:1 contrast.
+11. **Fixes from a second independent review of upstream (6 findings, all fixed before this handoff):**
+   - The code check fails closed: if the parser file can't be loaded (for example in a tab opened before a deploy), nothing is loaded and the notice says to reload. The parser is preloaded at startup.
+   - If saving the current chat id or the player mirror fails, the mirror is removed, so a reload can't bring back an older pattern or put another chat's pattern into the chat that opens (section 6).
+   - An imported pattern that doesn't parse is not selected; it stays in the chat's data.
+   - Switching chats always starts a fresh player, even when both chats have the same pattern.
+   - API keys are removed from provider and network errors before they are shown, stored, exported or logged.
+   - The reply header wraps on narrow phones.
 
 ## 4. Check downstream for the same defects
 
@@ -90,7 +97,7 @@ Copy these files. Each heading names the upstream path; put them wherever fits y
 
 ### 5.1 Stream end states
 
-`generateStrudelCode` is OpenRouter-specific (endpoint, headers, `SYSTEM_PROMPT` default). **Platform-specific:** keep your provider switch and your error scrubbing (keys removed, 280-character cap), and keep `temperature`/`max_tokens` if you want them. Port the part between `let content` and the `return`: how terminal signals map to a status. Your Grok path needs the same status logic. If your server does not emit `finish_reason` or `[DONE]`, make it do so; otherwise every Grok reply will count as `interrupted`.
+`generateStrudelCode` is OpenRouter-specific (endpoint, headers, `SYSTEM_PROMPT` default). **Platform-specific:** keep your provider switch and your error scrubbing (keys removed, 280-character cap; upstream's `redact()` does the key part, so apply both), and keep `temperature`/`max_tokens` if you want them. Port the part between `let content` and the `return`: how terminal signals map to a status. Your Grok path needs the same status logic. If your server does not emit `finish_reason` or `[DONE]`, make it do so; otherwise every Grok reply will count as `interrupted`.
 
 #### `src/lib/openrouter.js`
 
@@ -137,11 +144,28 @@ function statusFromFinish(finishReason, refused) {
     return 'completed'; // stop, tool_calls, null with [DONE], or a value added later
 }
 
-function errorInfo(err, fallback) {
-    const info = { message: err?.message || fallback };
-    if (err?.code !== undefined) info.code = err.code;
+const KEY_PATTERNS = [/\bsk-or-[A-Za-z0-9_-]{8,}/g, /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi];
+
+/**
+ * Remove API keys from text that came from the provider or the network, before it is shown,
+ * stored in the chat, exported or logged: the exact key of this request, and anything that looks
+ * like an OpenRouter key or a bearer token.
+ * @param {unknown} text
+ * @param {string} [apiKey]
+ */
+export function redact(text, apiKey) {
+    if (typeof text !== 'string') return text;
+    let out = apiKey && apiKey.length >= 8 ? text.split(apiKey).join('[redacted]') : text;
+    for (const pattern of KEY_PATTERNS) out = out.replace(pattern, '[redacted]');
+    return out;
+}
+
+/** The parts of a provider error that are kept: message, code and type, with keys removed. */
+function errorInfo(err, fallback, apiKey) {
+    const info = { message: redact(err?.message || fallback, apiKey) };
+    if (err?.code !== undefined) info.code = redact(err.code, apiKey);
     const type = err?.metadata?.error_type ?? err?.type;
-    if (type) info.type = type;
+    if (type) info.type = redact(type, apiKey);
     return info;
 }
 
@@ -187,6 +211,10 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     let error = null;
     let status;
 
+    // Errors keep only a cleaned summary (see errorInfo), and only that is logged: a raw error
+    // body or exception could contain the key
+    const failure = (err, fallback) => errorInfo(err, fallback, cleanApiKey);
+
     const grow = (text) => {
         if (!text) return;
         content += text;
@@ -212,9 +240,9 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error("OpenRouter Error Response:", errorData);
-            error = errorInfo(errorData.error, `OpenRouter API Error: ${response.status} ${response.statusText}`);
+            error = failure(errorData.error, `OpenRouter API Error: ${response.status} ${response.statusText}`);
             if (error.code === undefined) error.code = response.status;
+            console.error("OpenRouter Error Response:", error);
         } else {
             const contentType = response.headers?.get?.("content-type") || "";
             if (contentType.includes("application/json") || !response.body) {
@@ -225,7 +253,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                 usage = data.usage || null;
                 const choice = data.choices?.[0];
                 if (data.error && !choice) {
-                    error = errorInfo(data.error, "The model reported an error");
+                    error = failure(data.error, "The model reported an error");
                 } else if (!choice) {
                     error = { message: "No response from model" };
                 } else {
@@ -234,7 +262,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     grow(choice.message?.content || refusal || "");
                     finishReason = choice.finish_reason || null;
                     nativeFinishReason = choice.native_finish_reason || null;
-                    if (data.error) error = errorInfo(data.error, "The model reported an error");
+                    if (data.error) error = failure(data.error, "The model reported an error");
                     terminal = true;
                 }
             } else {
@@ -252,7 +280,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     }
                     if (chunk.error) {
                         // Mid-stream failure: OpenRouter ends the stream after this event (HTTP status stays 200)
-                        error = errorInfo(chunk.error, "The model reported an error");
+                        error = failure(chunk.error, "The model reported an error");
                         break;
                     }
                     resolvedModel = chunk.model || resolvedModel;
@@ -278,12 +306,12 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
         } else if (streaming && content) {
             // The connection broke while the reply was arriving (for example the network went away):
             // the text so far is kept and marked as interrupted, like a stream that closed early.
-            console.error("OpenRouter stream interrupted:", err);
             status = "interrupted";
-            error = errorInfo(err, "The connection was interrupted");
+            error = failure(err, "The connection was interrupted");
+            console.error("OpenRouter stream interrupted:", error);
         } else {
-            console.error("OpenRouter API Error:", err);
-            error = errorInfo(err, "The request failed");
+            error = failure(err, "The request failed");
+            console.error("OpenRouter API Error:", error);
         }
     }
 
@@ -370,7 +398,7 @@ export function notLoadedNotice(status) {
 /**
  * The screen-reader announcement once a request has ended.
  * @param {{ status: GenerationStatus, code?: string | null, error?: { message: string } | null }} result
- * @param {'loaded' | 'invalid' | 'not-loaded' | 'none'} [load] what happened to the code
+ * @param {'loaded' | 'invalid' | 'unchecked' | 'not-loaded' | 'none'} [load] what happened to the code
  */
 export function announcement(result, load = 'none') {
     switch (result.status) {
@@ -383,6 +411,7 @@ export function announcement(result, load = 'none') {
             if (!result.code) return 'Reply received';
             if (load === 'loaded') return 'Reply received. The pattern was loaded into the player.';
             if (load === 'invalid') return 'Reply received. The pattern has a syntax error and was not loaded.';
+            if (load === 'unchecked') return 'Reply received. The pattern could not be checked and was not loaded. Reload the page.';
             return 'Reply received';
     }
 }
@@ -741,12 +770,15 @@ export function repairTypography(code) {
  * Check that a pattern is syntactically valid JavaScript before it is loaded into the player,
  * so a broken reply cannot replace a pattern that works.
  *
- * Uses the acorn parser, loaded on first use to keep the initial page small. It parses the code
+ * Uses the acorn parser, kept in a separate file to keep the initial page small. It parses the code
  * without running it, so it works under the app's Content-Security-Policy (which forbids eval and
  * the Function constructor).
  *
- * Fails open: only a real syntax error refuses a pattern. If the parser cannot be loaded or fails
- * in any other way, the pattern is loaded as before, so this check can never block playback.
+ * Fails closed: if the parser cannot be loaded (for example a tab opened before a new deploy, whose
+ * parser file is gone) or fails in any way other than a syntax error, the pattern is refused with
+ * a message saying it could not be checked. Nothing unchecked replaces a pattern that works.
+ * The parser is preloaded at startup (preloadParser in main.jsx), so it comes from the same build
+ * as the page.
  */
 
 import { repairTypography } from './codeRepair';
@@ -759,29 +791,50 @@ const PARSE_OPTIONS = {
     allowHashBang: true,
 };
 
+export const UNAVAILABLE_MESSAGE = 'The code could not be checked because part of the app did not load. Reload the page, then choose "Use this version" on the reply.';
+
 let parserPromise;
-const loadParser = () => (parserPromise ??= import('acorn').then(m => m.parse));
+const importParser = () => import('acorn').then(m => m.parse);
+const loadParser = (load = importParser) => (parserPromise ??= load());
+
+/** Start loading the parser now, so a later check does not depend on the network. */
+export function preloadParser() {
+    loadParser().catch(() => { parserPromise = undefined; });
+}
 
 /**
  * @param {string} code
- * @param {{ parse?: (code: string, options: object) => unknown }} [deps] for tests
- * @returns {Promise<string | null>} the syntax error message, or null when the pattern may be loaded
+ * @param {{ parse?: Function, load?: () => Promise<Function> }} deps for tests
+ * @returns {Promise<{ error: string | null, unavailable: boolean }>}
  */
-export async function patternSyntaxError(code, deps = {}) {
-    if (!code || !code.trim()) return null;
+async function checkSyntax(code, deps) {
+    if (!code || !code.trim()) return { error: null, unavailable: false };
     let parse = deps.parse;
-    try {
-        parse ??= await loadParser();
-    } catch {
-        parserPromise = undefined; // try again next time
-        return null;
+    if (!parse) {
+        try {
+            parse = deps.load ? await deps.load() : await loadParser();
+        } catch {
+            parserPromise = undefined; // try again next time
+            return { error: UNAVAILABLE_MESSAGE, unavailable: true };
+        }
     }
     try {
         parse(code, PARSE_OPTIONS);
-        return null;
+        return { error: null, unavailable: false };
     } catch (error) {
-        return error instanceof SyntaxError ? error.message : null;
+        if (error instanceof SyntaxError) return { error: error.message, unavailable: false };
+        return { error: `The code could not be checked (${error?.message || 'parser error'}).`, unavailable: true };
     }
+}
+
+/**
+ * @param {string} code
+ * @param {{ parse?: Function, load?: () => Promise<Function> }} [deps] for tests
+ * @returns {Promise<string | null>} why the pattern may not be loaded (a syntax error, or that it
+ *   could not be checked), or null when it may be loaded
+ */
+export async function patternSyntaxError(code, deps = {}) {
+    return (await checkSyntax(code, deps)).error;
 }
 
 /**
@@ -792,23 +845,27 @@ export async function patternSyntaxError(code, deps = {}) {
  * 2. Otherwise a syntax-aware typography repair is tried (curly quotes used as delimiters, dashes
  *    used as a minus; see codeRepair.js). It is used only if the repaired code parses.
  * 3. Otherwise the code is refused with the original's syntax error.
+ * If the parser is unavailable, the code is refused with `unavailable: true` and no repair is tried.
  *
  * The returned `code` is the string that was validated; store, encode and play exactly that.
  *
  * @param {string} code
- * @param {{ parse?: (code: string, options: object) => unknown }} [deps] for tests
- * @returns {Promise<{ ok: boolean, code: string, repaired: boolean, error: string | null }>}
+ * @param {{ parse?: Function, load?: () => Promise<Function> }} [deps] for tests
+ * @returns {Promise<{ ok: boolean, code: string, repaired: boolean, error: string | null, unavailable?: true }>}
  */
 export async function preparePattern(code, deps = {}) {
-    const error = await patternSyntaxError(code, deps);
+    const { error, unavailable } = await checkSyntax(code, deps);
     if (!error) return { ok: true, code, repaired: false, error: null };
+    if (unavailable) return { ok: false, code, repaired: false, error, unavailable: true };
     const repaired = repairTypography(code);
-    if (repaired !== code && !(await patternSyntaxError(repaired, deps))) {
+    if (repaired !== code && !(await checkSyntax(repaired, deps)).error) {
         return { ok: true, code: repaired, repaired: true, error: null };
     }
     return { ok: false, code, repaired: false, error };
 }
 ~~~~
+
+Call `preloadParser()` once at startup (upstream does it in `main.jsx`), so the parser comes from the same build as the page. Every path that puts code on the stage goes through `preparePattern`, and a result with `unavailable: true` is shown as "reload the page", not as a syntax error.
 
 ### 5.3 Revisions, per-chat stage, per-request control
 
@@ -1218,8 +1275,8 @@ export function useRequests() {
 ~~~~js
 // SPDX-License-Identifier: MIT
 /**
- * Whether saving the chats to localStorage is failing (storage full or blocked), as a tiny
- * external store for useSyncExternalStore.
+ * Whether saving to localStorage is failing (storage full or blocked): the chats, or the current
+ * chat id and player mirror. A tiny external store for useSyncExternalStore.
  *
  * The snapshot is 0 while saving works. When a save fails after one that worked, it becomes a new
  * positive number (a failure "episode"), so a warning the user dismissed comes back if saving
@@ -1227,11 +1284,16 @@ export function useRequests() {
  */
 let episode = 0;
 let failing = false;
+const failingKeys = new Set();
 const listeners = new Set();
 
-/** @param {boolean} ok whether the last save worked */
-export function reportSave(ok) {
-    const next = !ok;
+/**
+ * @param {boolean} ok whether the last save of `what` worked
+ * @param {string} [what] which value was saved; saving is failing while any of them fails
+ */
+export function reportSave(ok, what = 'chats') {
+    if (ok) failingKeys.delete(what); else failingKeys.add(what);
+    const next = failingKeys.size > 0;
     if (next === failing) return;
     failing = next;
     if (failing) episode++;
@@ -1257,7 +1319,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { reportSave, saveFailureEpisode, subscribeSaveStatus } from '../lib/saveStatus';
 import { CHATS_KEY, CURRENT_CHAT_KEY, LEGACY_CODE_KEY, createChat, loadInitialChats, removeChat, resetChats, withMessageIds } from '../lib/chats';
 import { stageCode } from '../lib/revisions';
-import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile } from '../lib/chatFile';
+import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile, withoutInvalidStage } from '../lib/chatFile';
+import { patternSyntaxError } from '../lib/patternCheck';
 import { downloadText } from '../lib/download';
 
 /** Chat list state, persistence, and import/export. */
@@ -1277,17 +1340,26 @@ export function useChats() {
         reportSave(ok);
     }, [chats]);
 
-    useEffect(() => {
-        try { localStorage.setItem(CURRENT_CHAT_KEY, currentChatId); } catch { /* storage unavailable */ }
-    }, [currentChatId]);
-
     const currentChat = chats.find(c => c.id === currentChatId);
     const currentStageCode = stageCode(currentChat);
 
-    // Keep the key earlier versions read the player's pattern from in step with the active chat
+    // Save the current chat id, and keep the key earlier versions read the player's pattern from
+    // (the mirror) in step with that chat. At startup a mirror that differs from the current chat's
+    // pattern is adopted as an edit made by an older version, so the mirror must never be left
+    // stale: if either write fails, the mirror is removed (removing works even when storage is
+    // full) and is not written again until both writes work. Otherwise a reload would bring back an
+    // older pattern, or put another chat's pattern into the chat that opens.
     useEffect(() => {
-        try { localStorage.setItem(LEGACY_CODE_KEY, currentStageCode); } catch { /* storage unavailable */ }
-    }, [currentStageCode]);
+        let ok = true;
+        try {
+            localStorage.setItem(CURRENT_CHAT_KEY, currentChatId);
+            localStorage.setItem(LEGACY_CODE_KEY, currentStageCode);
+        } catch {
+            ok = false;
+            try { localStorage.removeItem(LEGACY_CODE_KEY); } catch { /* storage unavailable */ }
+        }
+        reportSave(ok, 'current chat');
+    }, [currentChatId, currentStageCode]);
 
     const updateChat = (id, patch) => {
         setChats(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
@@ -1342,7 +1414,9 @@ export function useChats() {
                 throw new ChatFileError(`This file is too large to import (limit ${MAX_CHAT_FILE_BYTES / 1024 / 1024} MB).`);
             }
             const result = parseChatFile(await file.text());
-            result.chats = result.chats.map(c => withMessageIds(c));
+            const checked = await withoutInvalidStage(result.chats, code => patternSyntaxError(code));
+            result.chats = checked.chats.map(c => withMessageIds(c));
+            result.warnings.push(...checked.warnings);
             setChats(prev => [...result.chats, ...prev]);
             setCurrentChatId(result.chats[0].id);
             onImported?.();
@@ -1580,6 +1654,33 @@ export function parseChatFile(text, { now = new Date(), makeId = generateId } = 
     }
     if (chats.length === 0) throw new ChatFileError('No chats found in this file.');
     return { chats, skippedChats, skippedMessages, version, warnings };
+}
+
+/**
+ * An imported file is not trusted to contain code that runs: clear a chat's selected or previous
+ * revision when its code does not parse, so the import can never put broken code into the player
+ * (or behind "Restore previous"). The revisions themselves stay in the chat, and in later exports.
+ * @param {Chat[]} chats cleaned chats from parseChatFile
+ * @param {(code: string) => Promise<string | null>} syntaxError patternSyntaxError (patternCheck.js)
+ * @returns {Promise<{ chats: Chat[], warnings: string[] }>}
+ */
+export async function withoutInvalidStage(chats, syntaxError) {
+    const warnings = [];
+    const checked = [];
+    for (const chat of chats) {
+        let next = chat;
+        for (const key of ['selectedRevisionId', 'previousRevisionId']) {
+            const revision = chat.revisions?.find(r => r.id === chat[key]);
+            if (!revision || !(await syntaxError(revision.code))) continue;
+            next = { ...next };
+            delete next[key];
+            warnings.push(key === 'selectedRevisionId'
+                ? `The pattern in the chat "${chat.name}" has a syntax error, so it was not loaded. It is kept in the chat's data and in exports.`
+                : `The previous pattern in the chat "${chat.name}" has a syntax error, so "Restore previous" is off for it. It is kept in the chat's data and in exports.`);
+        }
+        checked.push(next);
+    }
+    return { chats: checked, warnings };
 }
 
 /** One-line summary of an import for the user. */
@@ -2155,7 +2256,8 @@ function App() {
      * Put a pattern on a chat's stage unless it is not valid JavaScript, so a broken reply cannot
      * replace a pattern that works. The stage gets exactly the code that was validated (possibly
      * with curly quotes repaired, which the notice then says). Only `chatId`'s stage changes,
-     * whichever chat is being viewed. Returns whether it was loaded.
+     * whichever chat is being viewed. Returns 'loaded', 'invalid' (a syntax error) or
+     * 'unchecked' (the code checker could not run, so nothing was loaded).
      *
      * @param {string} chatId
      * @param {string} code
@@ -2164,8 +2266,10 @@ function App() {
     const loadIntoStage = async (chatId, code, meta) => {
         const prepared = await preparePattern(code);
         if (!prepared.ok) {
-            setNotice(chatId, `Not loaded into the player: the code has a syntax error (${prepared.error}). The previous pattern is still loaded.`);
-            return false;
+            setNotice(chatId, prepared.unavailable
+                ? `Not loaded into the player: ${prepared.error} The previous pattern is still loaded.`
+                : `Not loaded into the player: the code has a syntax error (${prepared.error}). The previous pattern is still loaded.`);
+            return prepared.unavailable ? 'unchecked' : 'invalid';
         }
         setNotice(chatId, prepared.repaired ? 'Loaded with typographic quotes and dashes in the code replaced by plain ones, so that it runs.' : '');
         chat.updateChatWith(chatId, (c) => {
@@ -2173,7 +2277,7 @@ function App() {
             return meta.messageId ? updateMessage(next, meta.messageId, { revisionId: revision.id }) : next;
         });
         markNews(chatId);
-        return true;
+        return 'loaded';
     };
 
     const stopEditing = () => setEditingMessage({ index: null, id: null, content: '' });
@@ -2246,7 +2350,7 @@ function App() {
             // Load the pattern only when the reply completed and the code parses
             let load = 'none';
             if (result.code && canAutoLoad(result.status)) {
-                load = (await loadIntoStage(chatId, result.code, { origin: 'reply', messageId: message.id, model: message.model })) ? 'loaded' : 'invalid';
+                load = await loadIntoStage(chatId, result.code, { origin: 'reply', messageId: message.id, model: message.model });
             } else {
                 // Say why nothing was loaded (also for a refusal without code), or clear an older notice
                 setNotice(chatId, notLoadedNotice(result.status));
@@ -2297,15 +2401,19 @@ function App() {
     const loadMessageVersion = async (msg) => {
         const code = codeFromMessage(msg);
         if (!code) return;
-        const loaded = await loadIntoStage(currentChatId, code, { origin: 'message', messageId: msg.id, model: msg.model });
-        setAnnouncement(loaded ? 'The pattern was loaded into the player.' : 'The pattern has a syntax error and was not loaded.');
+        const load = await loadIntoStage(currentChatId, code, { origin: 'message', messageId: msg.id, model: msg.model });
+        setAnnouncement({
+            loaded: 'The pattern was loaded into the player.',
+            invalid: 'The pattern has a syntax error and was not loaded.',
+            unchecked: 'The pattern could not be checked and was not loaded. Reload the page.',
+        }[load]);
     };
 
     /** "Use edited code": the user pasted code from the Strudel editor; it becomes this chat's pattern. */
     const applyEditedCode = async (text) => {
         const chatId = currentChatId;
         const prepared = await preparePattern(text.trim());
-        if (!prepared.ok) return `This code has a syntax error (${prepared.error}), so it was not loaded.`;
+        if (!prepared.ok) return prepared.unavailable ? prepared.error : `This code has a syntax error (${prepared.error}), so it was not loaded.`;
         chat.updateChatWith(chatId, (c) => addRevision(c, { code: prepared.code, origin: 'edited', repaired: prepared.repaired }).chat);
         setNotice(chatId, prepared.repaired ? 'Loaded with typographic quotes and dashes in the code replaced by plain ones, so that it runs.' : '');
         setAnnouncement('Your edited code is now the pattern in the player.');
@@ -2425,6 +2533,7 @@ function App() {
 
                 <PlayerPanel
                     code={chat.stageCode}
+                    chatId={chat.currentChatId}
                     visibleOnMobile={tab === 'stage'}
                     notice={notices[currentChatId] || ''}
                     onDismissNotice={() => setNotice(currentChatId, '')}
@@ -2960,6 +3069,8 @@ Also port these small UI pieces, in your own design:
 - Settings > Music, with the two selects and an Advanced collapsible for the custom instructions (Reset, Export .txt, Import)
 - the save-failure banner with **Export all chats**
 - the chat list stops auto-scrolling while the reader is scrolled up
+- the player (iframe) is recreated on every chat switch, also when both chats have the same code: key it by chat id **and** code (upstream `StrudelFrame` uses ``key={`${playerId}:${shortHash(src)}`}`` with the chat id as `playerId`). Switching the phone's Chat/Stage tabs must keep it.
+- the reply header (label, model, badges, Edit, Use this version) wraps at 320 px, and a long model name breaks
 
 ## 6. Data: migrate the `svc.*` keys without data loss
 
@@ -2979,10 +3090,11 @@ Also port these small UI pieces, in your own design:
   const isStarter = legacyCode === STARTER_PATTERN && c.messages.length === 0;
   return isStarter && !stageCode(c) ? addRevision(c, { code: legacyCode, origin: 'starter' }).chat : adoptLegacyCode(c, legacyCode);
   ```
+- **Never leave a stale `svc.code`.** Write `svc.chat` and `svc.code` together. If either write fails (storage full), remove `svc.code` (removing works even then) and show the save warning. Otherwise the next start adopts the stale mirror: an older pattern comes back, or another chat's pattern is put into the chat that opens. See the effect in `useChats.js`.
 - **Messages:** give messages without an `id` one at load and at import.
   - Downstream marks cut-off replies with `cutOff: true`. The shared code reads it already: `messageStatus()` treats `truncated` **or** `cutOff` as `truncated`, and `chatFile.js` imports `cutOff: true` as `truncated: true`. Keep both checks (so upstream files import too). Keep writing `cutOff` (and `stopped`) next to `status`, so the previous version still marks them.
 - **Errors:** downstream stored a failed reply as its partial text followed by `\n\nError: …`. `messageStatus()` already treats such a message as `error`, so it is not sent back to the model. From now on, store `status: 'error'` on new failures, as `replyMessage()` does.
-- **Export:** format 3 adds `revisions`, `selectedRevisionId`, `previousRevisionId`, and the message fields `id`, `status`, `finishReason`, `error`, `usage`, `revisionId` and `promptVersion`. Import must clean every field, as `chatFile.js` does. Your existing export files, and upstream's version 1, 2 and 3 files, must all import.
+- **Export:** format 3 adds `revisions`, `selectedRevisionId`, `previousRevisionId`, and the message fields `id`, `status`, `finishReason`, `error`, `usage`, `revisionId` and `promptVersion`. Import must clean every field, as `chatFile.js` does, and must not select a revision whose code doesn't parse (`withoutInvalidStage`). Your existing export files, and upstream's version 1, 2 and 3 files, must all import.
 - **Repair rather than crash:** corrupt JSON, a missing current chat, or the string "null" as an id fall back to the first chat, as before.
 
 ## 7. Server-side items to verify (checks, not findings)
@@ -3004,7 +3116,8 @@ The criteria below are complete on their own. If you can see the upstream reposi
 - `generation.test.js`
 - `strudelUrl.test.js` (round trip)
 - `codeRepair.test.js`
-- `patternCheck.test.js`
+- `patternCheck.test.js` (fails closed)
+- `saveStatus.test.js`
 - `revisions.test.js` (migration included)
 - `chats.test.js`
 - `chatFile.test.js` (format 3)
@@ -3028,6 +3141,12 @@ The pass criteria are:
 13. Deleting a chat that is still writing a reply stops that request, and nothing is announced for it afterwards.
 14. A downstream backup with `cutOff: true` imports as cut off. A first visit's starter pattern is not sent as "the pattern in the player".
 15. In Settings, removing a bookmark and then pressing Escape closes the dialog. Tab stays inside the Chats panel.
+16. With the parser file blocked, a completed reply with invalid code leaves the previous pattern on stage, and the notice says to reload the page.
+17. With writes of `svc.code` failing, a pattern chosen with Use edited code is still on stage after a reload, and the save warning shows. With writes of `svc.chat` failing, switching to chat B and reloading opens chat A with A's own pattern. A `svc.code` written by the previous version is still adopted.
+18. Importing a format-3 file whose selected revision is `s("bd"` does not load it, says so, and keeps the revision in the chat.
+19. Two chats with the same pattern: switching between them replaces the iframe element; switching the phone tabs does not.
+20. A provider error, a JSON error body, a mid-stream error chunk and a network error that contain the key (or any `sk-or-…` or `Bearer …` text) leave no key in the message, the stored chat, an export or the console.
+21. At 320, 375 and 390 px, a reply's actions fit the conversation with no sideways scrolling (in your own layout).
 
 ## 9. Manual checklist (deployed app)
 
