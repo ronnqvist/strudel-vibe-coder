@@ -689,3 +689,48 @@ test.describe('review findings (Antigravity pass 1)', () => {
         await expect(page.getByRole('button', { name: 'Use this version in the player' })).toHaveCount(0);
     });
 });
+
+test.describe('review F11: dialogs and contrast', () => {
+    test('Escape still closes Settings after the focused button disappears', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Settings' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Configuration' });
+        await dialog.getByRole('button', { name: /^Remove bookmark/ }).first().click(); // the focused button is removed
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+    });
+
+    test('the Chats panel is modal: Tab stays inside it', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        const panel = page.getByRole('dialog', { name: 'Chats' });
+        await expect(panel).toHaveAttribute('aria-modal', 'true');
+        for (let i = 0; i < 15; i++) {
+            await page.keyboard.press('Tab');
+            expect(await page.evaluate(() => !!document.activeElement.closest('[role=dialog]'))).toBe(true);
+        }
+    });
+
+    test('small text in Settings meets 4.5:1 contrast', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Settings' }).click();
+        await page.getByText('Browse all OpenRouter models').click();
+        await page.getByText('Advanced: your own music instructions').click();
+        const ratios = await page.evaluate(() => {
+            // computed colours can be oklch(): let a canvas turn them into sRGB
+            const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+            const rgb = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+            const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((a, c, i) => a + c * [0.2126, 0.7152, 0.0722][i], 0);
+            const bg = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(0,0,0)'; };
+            const ratio = (el) => { const a = lum(rgb(getComputedStyle(el).color)), b = lum(rgb(bg(el))); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+            const counter = [...document.querySelectorAll('span')].find(s => /^\d+ \/ 2000$/.test(s.textContent.trim()));
+            const limits = [...document.querySelectorAll('span')].find(s => /context/.test(s.textContent) && /max output|context$/.test(s.textContent.trim()));
+            return { counter: counter && ratio(counter), limits: limits && ratio(limits) };
+        });
+        expect(ratios.counter).toBeGreaterThanOrEqual(4.5);
+        expect(ratios.limits).toBeGreaterThanOrEqual(4.5);
+    });
+});

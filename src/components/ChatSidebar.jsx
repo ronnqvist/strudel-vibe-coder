@@ -21,7 +21,7 @@ const ChatSidebar = ({
     onExport,
     onDelete,
 }) => {
-    const { attach, onKeyDown } = useDialog({ onClose });
+    const { attach, onKeyDown } = useDialog({ onClose, trap: true });
     const fileInput = useRef(null);
 
     return (
@@ -29,6 +29,7 @@ const ChatSidebar = ({
             ref={attach}
             onKeyDown={onKeyDown}
             role="dialog"
+            aria-modal="true"
             aria-label="Chats"
             tabIndex={-1}
             className="absolute top-0 left-0 w-full md:w-1/2 h-full bg-cyber-black/95 backdrop-blur-md z-40 flex flex-col border-r border-cyber-neon/30"

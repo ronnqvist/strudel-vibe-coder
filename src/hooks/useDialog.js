@@ -5,6 +5,9 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
 
 const isVisible = (el) => el.getClientRects().length > 0;
 
+/** Open dialogs, most recent last: only the top one handles keys whose focus was lost. */
+const openDialogs = [];
+
 /**
  * Behaviour shared by the app's dialogs and overlay panels.
  *
@@ -22,7 +25,8 @@ export function useDialog({ onClose, trap = false }) {
     const nodeRef = useRef(null);
     const attach = useCallback((node) => { nodeRef.current = node; }, []);
     const closeRef = useRef(onClose);
-    useEffect(() => { closeRef.current = onClose; });
+    const trapRef = useRef(trap);
+    useEffect(() => { closeRef.current = onClose; trapRef.current = trap; });
 
     useEffect(() => {
         const previous = document.activeElement;
@@ -31,6 +35,30 @@ export function useDialog({ onClose, trap = false }) {
         (first || node)?.focus();
         return () => {
             if (previous instanceof HTMLElement && document.contains(previous)) previous.focus();
+        };
+    }, []);
+
+    // When the focused control inside the dialog disappears (for example "Remove bookmark"), focus
+    // falls back to the page and key presses no longer reach the dialog. Catch them on the document,
+    // for the topmost open dialog only, and bring focus back into the dialog.
+    useEffect(() => {
+        const self = {};
+        openDialogs.push(self);
+        const onDocumentKey = (e) => {
+            const node = nodeRef.current;
+            if (openDialogs[openDialogs.length - 1] !== self || !node || node.contains(document.activeElement)) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeRef.current();
+            } else if (e.key === 'Tab' && trapRef.current) {
+                e.preventDefault();
+                ([...node.querySelectorAll(FOCUSABLE)].find(isVisible) || node).focus();
+            }
+        };
+        document.addEventListener('keydown', onDocumentKey);
+        return () => {
+            document.removeEventListener('keydown', onDocumentKey);
+            openDialogs.splice(openDialogs.indexOf(self), 1);
         };
     }, []);
 
