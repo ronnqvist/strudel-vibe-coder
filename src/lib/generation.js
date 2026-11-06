@@ -94,12 +94,22 @@ export function apiConversation(messages) {
  * @param {string} [modelName] fallback when the result names no model
  * @param {{ makeId?: () => string, promptVersion?: string }} [options] `promptVersion`: of the system prompt used
  */
+const EMPTY_REPLY_TEXT = {
+    truncated: 'The model reached its length limit before writing any reply text.',
+    refused: 'The model declined this request.',
+    interrupted: 'The connection closed before any reply text arrived.',
+};
+
 export function replyMessage(result, modelName, { makeId = generateId, promptVersion } = {}) {
-    const plainError = result.status === 'error' && !result.content;
+    const empty = !(result.content ?? '').trim();
+    const plainError = result.status === 'error' && empty;
+    const content = plainError
+        ? `Error: ${result.error?.message || 'the request failed'}`
+        : (empty && EMPTY_REPLY_TEXT[result.status]) || result.content;
     return {
         id: makeId(),
         role: 'assistant',
-        content: plainError ? `Error: ${result.error?.message || 'the request failed'}` : result.content,
+        content,
         code: result.code ?? null,
         ...(!plainError && { model: result.modelLabel ?? modelName }),
         status: result.status,
