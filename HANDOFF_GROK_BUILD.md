@@ -6,7 +6,7 @@ This brief is complete on its own: you don't need access to any repository. Wher
 
 - Upstream: https://github.com/ronnqvist/strudel-vibe-coder (MIT, Copyright (c) 2025-2026 Simon Rönnqvist).
 - The **previous sync** was based on upstream commit `250786e6cbd6ba923d846a186ddfa948574784c9`. This brief is a **delta** from that commit.
-- The **implementation** this brief describes is upstream commit `9f0eff6d4dbc14df1187633a32cbbc990c7f49a4`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
+- The **implementation** this brief describes is upstream commit `f4c93e65cc32a1b601814b6a8de5dac6ebf67006`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
 - Strudel is a separate AGPL-3.0 project. The app opens https://strudel.cc in an iframe. Do not bundle Strudel code, do not add `@strudel/embed`, and do not read or script the iframe. All of that is unchanged from the previous sync.
 
 The downstream app is its own codebase (TanStack Start). This is not a copy-over: keep its structure, and port the behaviour and the modules below.
@@ -74,6 +74,7 @@ Error: …` count as errors (section 6).
    - API keys are removed from provider and network errors before they are shown, stored, exported or logged.
    - The reply header wraps on narrow phones.
 12. **A fact check of the prompt against strudel.cc/learn** (each point checked in the real REPL): the `.mask` example now mutes the cycle it describes; patterns on one orbit overwrite each other's delay and reverb unpredictably; a `let`/`const` holding a pattern is allowed; default sounds are "loaded by default"; the lowpass range and the chaining order are worded as the docs give them. `PROMPT_VERSION` is now **2.0.2**; the system prompt you use on the Grok path must be this one.
+13. **Optional: custom OpenAI-compatible endpoints.** Settings > Provider can send requests to any OpenAI-compatible API (a base URL, an optional key, and a model id that is typed or loaded from `GET /models`) instead of OpenRouter. `generateStrudelCode` takes `endpoint: { url, apiKey }`, and `useSettings` turns the chosen provider into one `connection`. Upstream's `<meta>` CSP now has `connect-src https: http://localhost:* http://127.0.0.1:*`. Your CSP is an HTTP header that you control: port this only if you want it, and then widen `connect-src` the same way. The new keys would be `svc.endpoints`, `svc.activeEndpoint` and `svc.endpointKeys` (keys only while "remember" is on, and never exported). `src/lib/endpoints.js` is listed in section 5.5.
 
 ## 4. Check downstream for the same defects
 
@@ -145,12 +146,17 @@ function statusFromFinish(finishReason, refused) {
     return 'completed'; // stop, tool_calls, null with [DONE], or a value added later
 }
 
-const KEY_PATTERNS = [/\bsk-or-[A-Za-z0-9_-]{8,}/g, /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi];
+const KEY_PATTERNS = [
+    /\bsk-or-[A-Za-z0-9_-]{8,}/g, // OpenRouter
+    /\bsk-[A-Za-z0-9_-]{16,}/g, // OpenAI, DeepSeek and others
+    /\b(xai-|gsk_)[A-Za-z0-9_-]{16,}/g, // xAI, Groq
+    /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
+];
 
 /**
  * Remove API keys from text that came from the provider or the network, before it is shown,
  * stored in the chat, exported or logged: the exact key of this request, and anything that looks
- * like an OpenRouter key or a bearer token.
+ * like a provider key (OpenRouter, OpenAI, xAI, Groq and similar) or a bearer token.
  * @param {unknown} text
  * @param {string} [apiKey]
  */
@@ -174,27 +180,39 @@ function errorInfo(err, fallback, apiKey) {
  * Ask the model for Strudel code and stream the reply.
  *
  * Never throws once the request has been made: every outcome is a result with a `status`.
- * Only a missing API key throws (before any request).
+ * Only a missing OpenRouter API key throws (before any request).
  *
- * @param {string} apiKey
- * @param {string} model OpenRouter model id
+ * @param {string} apiKey the OpenRouter key (not used with a custom `endpoint`)
+ * @param {string} model the model id
  * @param {{ role: string, content: string }[]} conversation the whole conversation so far,
  *   including the user's newest message as its last entry (it is not appended again here)
  * @param {string} [modelName] display name used in the attribution line
- * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void, systemPrompt?: string }} [options]
+ * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void, systemPrompt?: string, endpoint?: { url: string, apiKey?: string } }} [options]
  *   `signal` stops the request; the text received so far is then returned with status `aborted`.
  *   `onText` is called with the full reply text every time it grows.
  *   `systemPrompt` is the composed prompt for this request (default: the full SYSTEM_PROMPT).
+ *   `endpoint` sends the request to a custom OpenAI-compatible endpoint instead of OpenRouter: its
+ *   chat-completions URL and its key (optional, for example for a local server). It gets only the
+ *   Content-Type and, with a key, the Authorization header, never OpenRouter's app headers.
  * @returns {Promise<GenerationResult>}
  *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases);
  *   `modelLabel` is what to show for it: the concrete model for an alias, the display name otherwise.
  *   `stopped` and `truncated` mirror `status` for code (and stored chats) that predate `status`.
  */
-export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText, systemPrompt = SYSTEM_PROMPT } = {}) {
-    const cleanApiKey = apiKey?.trim();
-    if (!cleanApiKey) {
+export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText, systemPrompt = SYSTEM_PROMPT, endpoint } = {}) {
+    const cleanApiKey = (endpoint ? endpoint.apiKey : apiKey)?.trim() || '';
+    if (!endpoint && !cleanApiKey) {
         throw new Error("API Key is required");
     }
+    const requestUrl = endpoint ? endpoint.url : OPENROUTER_API_URL;
+    const headers = endpoint
+        ? { "Content-Type": "application/json", ...(cleanApiKey && { Authorization: `Bearer ${cleanApiKey}` }) }
+        : {
+            "Authorization": `Bearer ${cleanApiKey}`,
+            "HTTP-Referer": appReferer(), // Identifies the app to OpenRouter; never includes the URL hash
+            "X-Title": "Strudel Vibe Coder", // Optional
+            "Content-Type": "application/json"
+        };
 
     const messages = [
         { role: "system", content: systemPrompt },
@@ -223,14 +241,9 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     };
 
     try {
-        const response = await fetch(OPENROUTER_API_URL, {
+        const response = await fetch(requestUrl, {
             method: "POST",
-            headers: {
-                "Authorization": `Bearer ${cleanApiKey}`,
-                "HTTP-Referer": appReferer(), // Identifies the app to OpenRouter; never includes the URL hash
-                "X-Title": "Strudel Vibe Coder", // Optional
-                "Content-Type": "application/json"
-            },
+            headers,
             body: JSON.stringify({
                 model: model,
                 messages: messages,
@@ -241,7 +254,8 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            error = failure(errorData.error, `OpenRouter API Error: ${response.status} ${response.statusText}`);
+            const statusLine = `${response.status} ${response.statusText}`.trim();
+            error = failure(errorData.error, endpoint ? `The endpoint returned an error: ${statusLine}` : `OpenRouter API Error: ${statusLine}`);
             if (error.code === undefined) error.code = response.status;
             console.error("OpenRouter Error Response:", error);
         } else {
@@ -2190,6 +2204,8 @@ function App() {
     const [notices, setNotices] = useState({}); // chatId -> why the last pattern was not loaded
     const [news, setNews] = useState(() => new Set()); // chats whose stage changed since it was last seen
     const [showSettings, setShowSettings] = useState(false);
+    // What is missing before a request can be sent, shown in Settings when it opened for that
+    const [settingsNotice, setSettingsNotice] = useState('');
     const [showChats, setShowChats] = useState(false);
     const [pasteDialog, setPasteDialog] = useState(null); // 'code' | 'error' | null
     const [editingMessage, setEditingMessage] = useState({ index: null, id: null, content: '' });
@@ -2330,10 +2346,12 @@ function App() {
                 customInstructions: settings.customInstructions,
             });
 
-            const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
+            const { connection } = settings;
+            const result = await generateStrudelCode(settings.effectiveApiKey, connection.model, apiMessages, connection.modelName, {
                 signal: req.signal,
                 onText: req.onText,
                 systemPrompt,
+                endpoint: connection.endpoint,
             });
 
             // The chat was deleted while the reply was arriving: nothing to add or announce
@@ -2345,7 +2363,7 @@ function App() {
                 return;
             }
 
-            const message = replyMessage(result, settings.modelName, { promptVersion: PROMPT_VERSION });
+            const message = replyMessage(result, connection.modelName, { promptVersion: PROMPT_VERSION });
             chat.updateChatWith(chatId, (c) => {
                 const next = appendMessage(c, message);
                 return firstMessageText ? nameAfterFirstMessage(next, firstMessageText) : next;
@@ -2376,10 +2394,10 @@ function App() {
         if (await sendText(text)) setInput('');
     };
 
-    /** Ask for a key when there is none. Returns whether there is one. */
+    /** Open Settings and say what is missing (a key, or a model) when a request cannot be sent yet. */
     const haveKey = () => {
-        if (settings.effectiveApiKey) return true;
-        alert("Please enter your OpenRouter API Key in settings.");
+        if (settings.connection.ready) return true;
+        setSettingsNotice(settings.connection.missing);
         setShowSettings(true);
         return false;
     };
@@ -2428,7 +2446,7 @@ function App() {
     const fixError = async (text) => {
         if (isLoading || requests.isRunning(currentChatId)) return 'A reply is still being written in this chat. Try again when it has finished.';
         // Keep the dialog (and the pasted error) open until the request can really be sent
-        if (!settings.effectiveApiKey) return 'Add your OpenRouter API key in Settings first. Your error text stays here.';
+        if (!settings.connection.ready) return `${settings.connection.missing} Your error text stays here.`;
         const sent = await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
         return sent ? null : 'The error could not be sent. Try again.';
     };
@@ -2449,7 +2467,7 @@ function App() {
                 showChats={showChats}
                 showSettings={showSettings}
                 onToggleChats={() => setShowChats(!showChats)}
-                onToggleSettings={() => setShowSettings(!showSettings)}
+                onToggleSettings={() => { setShowSettings(!showSettings); setSettingsNotice(''); }}
             />
 
             <div role="status" aria-live="polite" className="sr-only">{announcement}</div>
@@ -2502,7 +2520,16 @@ function App() {
                         promptPrefs={settings.promptPrefs}
                         onPromptPrefsChange={settings.setPromptPrefs}
                         musicExtras={<CustomInstructions value={settings.customInstructions} onChange={settings.setCustomInstructions} />}
-                        onClose={() => setShowSettings(false)}
+                        onClose={() => { setShowSettings(false); setSettingsNotice(''); }}
+                        notice={settingsNotice}
+                        endpoints={settings.endpoints}
+                        activeEndpointId={settings.activeEndpointId}
+                        onActiveEndpointChange={(id) => { settings.setActiveEndpoint(id); setSettingsNotice(''); }}
+                        onAddEndpoint={settings.addEndpoint}
+                        onUpdateEndpoint={settings.updateEndpoint}
+                        onRemoveEndpoint={settings.removeEndpoint}
+                        endpointKeys={settings.endpointKeys}
+                        onEndpointKeyChange={settings.setEndpointKey}
                     />
                 )}
 
@@ -2513,7 +2540,7 @@ function App() {
                         messages={chat.messages}
                         isLoading={isLoading}
                         streamingText={requests.textFor(currentChatId)}
-                        streamingModel={settings.modelName}
+                        streamingModel={settings.connection.modelName}
                         onPickPrompt={pickPrompt}
                         editing={editingMessage}
                         onEditContentChange={(content) => setEditingMessage({ ...editingMessage, content })}
@@ -2758,18 +2785,24 @@ import { useEffect, useState } from 'react';
 import { readStorage, useLocalStorage } from './useLocalStorage';
 import { DEFAULT_MODEL_ID } from '../config';
 import { migrateBookmarks } from '../lib/models';
-import { loadApiKey, persistApiKey, persistRemember, readRemember } from '../lib/keyStorage';
+import { loadApiKey, loadEndpointKeys, persistApiKey, persistEndpointKeys, persistRemember, readRemember } from '../lib/keyStorage';
+import { OPENROUTER_ENDPOINT, chatUrl, cleanEndpoints } from '../lib/endpoints';
+import { generateId } from '../lib/utils';
 import { urlKey } from '../lib/urlKey';
 import { DEFAULT_PREFS, MAX_CUSTOM_INSTRUCTIONS, cleanPrefs } from '../lib/prompt';
 
 export const PROMPT_PREFS_KEY = 'openrouter_prompt_prefs';
 export const CUSTOM_INSTRUCTIONS_KEY = 'openrouter_custom_instructions';
+export const ENDPOINTS_KEY = 'openrouter_endpoints';
+export const ACTIVE_ENDPOINT_KEY = 'openrouter_active_endpoint';
 
 /**
- * API key, active model and model bookmarks.
+ * Where requests go (OpenRouter or a custom OpenAI-compatible endpoint), the keys, the active
+ * model and the model bookmarks, and the musical preferences.
  *
- * The key comes from storage (while "remember" is on) and can be replaced for this visit by a
- * temporary key from the address (`#sk-or-v1-…`), which is held in memory only.
+ * The OpenRouter key comes from storage (while "remember" is on) and can be replaced for this
+ * visit by a temporary key from the address (`#sk-or-v1-…`), which is held in memory only.
+ * Custom endpoints' keys follow the same "remember" setting and are never part of an export.
  */
 export function useSettings() {
     const [remember, setRememberState] = useState(() => readRemember(localStorage));
@@ -2799,6 +2832,36 @@ export function useSettings() {
         persistApiKey(localStorage, apiKey, remember);
     }, [apiKey, remember]);
 
+    // Custom endpoints (without keys) and which provider is in use
+    const [storedEndpoints, setStoredEndpoints] = useLocalStorage(ENDPOINTS_KEY, [], { json: true });
+    const endpoints = cleanEndpoints(storedEndpoints);
+    const [activeId, setActiveId] = useLocalStorage(ACTIVE_ENDPOINT_KEY, OPENROUTER_ENDPOINT);
+    const [endpointKeys, setEndpointKeys] = useState(() => loadEndpointKeys(localStorage));
+    useEffect(() => {
+        persistEndpointKeys(localStorage, endpointKeys, remember);
+    }, [endpointKeys, remember]);
+    const active = endpoints.find(e => e.id === activeId) ?? null;
+
+    /** Add an endpoint (already checked with checkBaseUrl) and switch to it. Returns its id. */
+    const addEndpoint = ({ name = '', baseUrl, model = '' }) => {
+        const id = generateId();
+        setStoredEndpoints(prev => [...cleanEndpoints(prev), { id, name, baseUrl, model }]);
+        setActiveId(id);
+        return id;
+    };
+    const updateEndpoint = (id, patch) =>
+        setStoredEndpoints(prev => cleanEndpoints(prev).map(e => (e.id === id ? { ...e, ...patch } : e)));
+    const removeEndpoint = (id) => {
+        setStoredEndpoints(prev => cleanEndpoints(prev).filter(e => e.id !== id));
+        setEndpointKeys(prev => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+        if (activeId === id) setActiveId(OPENROUTER_ENDPOINT);
+    };
+    const setEndpointKey = (id, key) => setEndpointKeys(prev => ({ ...prev, [id]: key }));
+
     const setRemember = (value) => {
         persistRemember(localStorage, value);
         setRememberState(value);
@@ -2810,7 +2873,44 @@ export function useSettings() {
         setHashApiKey('');
     };
 
+    const modelName = savedModels.find(m => m.id === model)?.name || model;
+    /**
+     * Where the next request goes. `ready` says whether it can be sent; `missing` says what to
+     * set up in Settings first. A custom endpoint needs a model (a key is optional: a local server
+     * may need none); OpenRouter needs a key.
+     */
+    const connection = active
+        ? {
+            kind: 'custom',
+            id: active.id,
+            name: active.name,
+            model: active.model,
+            modelName: active.model,
+            endpoint: { url: chatUrl(active.baseUrl), apiKey: endpointKeys[active.id] || '' },
+            ready: Boolean(active.model),
+            missing: active.model ? '' : `Choose a model for ${active.name} in Settings first.`,
+        }
+        : {
+            kind: 'openrouter',
+            id: OPENROUTER_ENDPOINT,
+            name: 'OpenRouter',
+            model,
+            modelName,
+            endpoint: undefined,
+            ready: Boolean(hashApiKey || apiKey),
+            missing: hashApiKey || apiKey ? '' : 'Add your OpenRouter API key in Settings first.',
+        };
+
     return {
+        connection,
+        endpoints,
+        activeEndpointId: active ? active.id : OPENROUTER_ENDPOINT,
+        setActiveEndpoint: (id) => setActiveId(id === OPENROUTER_ENDPOINT || endpoints.some(e => e.id === id) ? id : OPENROUTER_ENDPOINT),
+        addEndpoint,
+        updateEndpoint,
+        removeEndpoint,
+        endpointKeys,
+        setEndpointKey,
         apiKey,
         setApiKey,
         hashApiKey,
@@ -2826,7 +2926,7 @@ export function useSettings() {
         customInstructions: typeof customInstructions === 'string' ? customInstructions.slice(0, MAX_CUSTOM_INSTRUCTIONS) : '',
         setCustomInstructions: (text) => setCustomInstructions(String(text ?? '').slice(0, MAX_CUSTOM_INSTRUCTIONS)),
         setPromptPrefs: (patch) => setStoredPrefs(prev => cleanPrefs({ ...cleanPrefs(prev), ...patch })),
-        modelName: savedModels.find(m => m.id === model)?.name || model,
+        modelName,
     };
 }
 ~~~~
@@ -3059,6 +3159,81 @@ export function useDialog({ onClose, trap = false }) {
     };
 
     return { attach, onKeyDown };
+}
+~~~~
+
+Optional (item 13 in section 3): the custom endpoint rules.
+
+#### `src/lib/endpoints.js`
+
+~~~~js
+// SPDX-License-Identifier: MIT
+/**
+ * Custom OpenAI-compatible endpoints (OpenAI, Groq, Mistral, DeepSeek, Together, xAI, or a local
+ * server such as Ollama or LM Studio): a base URL such as `https://api.groq.com/openai/v1`, to
+ * which `/chat/completions` and `/models` are added.
+ *
+ * Only https URLs are accepted, plus plain http on this computer (localhost and 127.0.0.1), which
+ * is what the Content-Security-Policy allows (scripts/csp.js). Keys are never part of an endpoint:
+ * they are kept like the OpenRouter key (see useSettings).
+ */
+
+/** The id of the built-in provider. */
+export const OPENROUTER_ENDPOINT = 'openrouter';
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+/**
+ * @param {string} input
+ * @returns {{ ok: true, url: string } | { ok: false, error: string }}
+ */
+export function checkBaseUrl(input) {
+    const text = String(input ?? '').trim();
+    if (!text) return { ok: false, error: 'Enter the base URL, for example https://api.groq.com/openai/v1.' };
+    let url;
+    try {
+        url = new URL(text);
+    } catch {
+        return { ok: false, error: 'That is not a full URL. Start it with https:// (or http://localhost for a server on this computer).' };
+    }
+    if (url.protocol === 'http:' && !LOCAL_HOSTS.has(url.hostname)) {
+        return { ok: false, error: 'Only https URLs work, except http://localhost and http://127.0.0.1 for a server on this computer.' };
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return { ok: false, error: 'Only https URLs work.' };
+    if (url.username || url.password) return { ok: false, error: 'Leave the user name and password out of the URL; put the key in the key field.' };
+    if (url.search || url.hash || text.includes('#') || text.includes('?')) {
+        return { ok: false, error: 'Leave the query (?…) and fragment (#…) out of the base URL.' };
+    }
+    return { ok: true, url: `${url.origin}${url.pathname}`.replace(/\/+$/, '') };
+}
+
+export const chatUrl = (base) => `${base}/chat/completions`;
+export const modelsUrl = (base) => `${base}/models`;
+
+/** Model ids from an OpenAI-style `GET /models` answer (`{ data: [{ id }] }`), sorted, without duplicates. */
+export function parseModelIds(json) {
+    const ids = Array.isArray(json?.data) ? json.data.map(m => m?.id).filter(id => typeof id === 'string' && id.trim()) : [];
+    return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * @typedef {{ id: string, name: string, baseUrl: string, model: string }} Endpoint
+ * @param {unknown} stored what was kept in localStorage
+ * @returns {Endpoint[]} the valid endpoints, without anything else (keys included)
+ */
+export function cleanEndpoints(stored) {
+    if (!Array.isArray(stored)) return [];
+    const seen = new Set([OPENROUTER_ENDPOINT]);
+    const out = [];
+    for (const e of stored) {
+        if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id || seen.has(e.id)) continue;
+        const checked = checkBaseUrl(e.baseUrl);
+        if (!checked.ok) continue;
+        seen.add(e.id);
+        const name = typeof e.name === 'string' && e.name.trim() ? e.name.trim().slice(0, 60) : new URL(checked.url).host;
+        out.push({ id: e.id, name, baseUrl: checked.url, model: typeof e.model === 'string' ? e.model.trim().slice(0, 200) : '' });
+    }
+    return out;
 }
 ~~~~
 
