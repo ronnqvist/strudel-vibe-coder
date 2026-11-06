@@ -16,7 +16,7 @@ import { CORE } from './core';
 import { MODULES, MODULE_NAMES } from './modules';
 import { cleanPrefs, preferencesText } from './preferences';
 
-export const PROMPT_VERSION = '2.0.1';
+export const PROMPT_VERSION = '2.0.2';
 
 /** Longest custom music instructions accepted (characters). */
 export const MAX_CUSTOM_INSTRUCTIONS = 2000;

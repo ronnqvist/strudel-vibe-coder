@@ -139,3 +139,33 @@ describe('system prompt: pitch-shifting examples that really shift pitch (review
         expect(SYSTEM_PROMPT).toMatch(/\.scaleTranspose\(4\)/);
     });
 });
+
+// Fact check of the prompt by a third reviewer; each point checked in the strudel.cc REPL
+// (queryArc, its loaded sound list) or against strudel.cc/learn before it was changed.
+describe('review pass 1c: prompt fact check', () => {
+    it('the mask example mutes the cycle it says it mutes (learn/conditional-modifiers, mini-notation)', () => {
+        // "<1 1 0 1>" mutes the third of every four cycles, not the fourth
+        expect(SYSTEM_PROMPT).not.toContain('.mask("<1 1 0 1>")');
+        expect(SYSTEM_PROMPT).toMatch(/\.mask\("<1 1 1 0>"\)[^\n]*every fourth cycle/);
+    });
+    it('does not forbid variables, which the Hydra example itself uses', () => {
+        expect(SYSTEM_PROMPT).toMatch(/let pattern = /);
+        expect(SYSTEM_PROMPT).not.toMatch(/NO imperative state management or variables/);
+    });
+    it('shared delay and reverb on one orbit overwrite each other unpredictably (learn/effects#orbits)', () => {
+        expect(SYSTEM_PROMPT).not.toMatch(/last setting wins/);
+        expect(SYSTEM_PROMPT).toMatch(/share one delay and one reverb[^\n]*unpredictabl/);
+    });
+    it('does not promise default sounds are "always available"; they load on first use (learn/samples)', () => {
+        expect(SYSTEM_PROMPT).not.toMatch(/Always Available/);
+    });
+    it('gives the lowpass range as the docs do, and the chaining order as a convention', () => {
+        expect(SYSTEM_PROMPT).not.toMatch(/20-20000 Hz/);
+        expect(SYSTEM_PROMPT).not.toMatch(/Chain methods in this order/);
+    });
+    it('keeps the facts the REPL confirmed: no standalone perc, .on() does not exist, all 15 banks exist', () => {
+        expect(SYSTEM_PROMPT).toMatch(/perc \(outside a drum machine bank\)/);
+        expect(SYSTEM_PROMPT).toMatch(/\.on\(\) does not exist/);
+        expect(SYSTEM_PROMPT).toMatch(/LinnDrum, AkaiLinn/);
+    });
+});

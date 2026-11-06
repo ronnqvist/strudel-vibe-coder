@@ -65,7 +65,7 @@ describe('composeSystemPrompt', () => {
     // When this fails, the prompt text changed: bump PROMPT_VERSION (it is stored with each reply)
     // and update the hash here, so that results can be told apart by prompt version.
     it('PROMPT_VERSION matches the prompt text', () => {
-        expect({ version: PROMPT_VERSION, hash: shortHash(composeSystemPrompt({ modules: [] })) }).toEqual({ version: '2.0.1', hash: '44e1c3b4' });
+        expect({ version: PROMPT_VERSION, hash: shortHash(composeSystemPrompt({ modules: [] })) }).toEqual({ version: '2.0.2', hash: '280b1152' });
     });
 });
 
