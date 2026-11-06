@@ -857,3 +857,26 @@ test('G4: switching to a chat with the same pattern still starts a fresh player'
     expect(await before.evaluate(el => el.isConnected)).toBe(false);
     expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("bd")');
 });
+
+for (const width of [320, 375, 390]) {
+    test(`G6: at ${width} px a reply and all its actions fit the conversation`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 700 });
+        await mockNetwork(page, { model: 'some-vendor/a-model-with-a-rather-long-name-v2' });
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('make a beat');
+        await page.keyboard.press('Enter');
+        const conversation = page.getByRole('region', { name: 'Conversation' });
+        const use = conversation.getByRole('button', { name: 'Use this version in the player' });
+        await expect(use).toBeVisible();
+        const sizes = await conversation.evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            const buttons = [...el.querySelectorAll('button')].filter(b => b.offsetParent).map(b => b.getBoundingClientRect());
+            const scroller = [el, ...el.querySelectorAll('*')].find(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== 'visible');
+            return { left: box.left, right: box.right, maxRight: Math.max(...buttons.map(b => b.right)), minLeft: Math.min(...buttons.map(b => b.left)), overflowing: Boolean(scroller) };
+        });
+        expect(sizes.overflowing).toBe(false);
+        expect(sizes.maxRight).toBeLessThanOrEqual(sizes.right + 0.5);
+        expect(sizes.minLeft).toBeGreaterThanOrEqual(sizes.left - 0.5);
+    });
+}

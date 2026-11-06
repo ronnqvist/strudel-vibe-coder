@@ -41,15 +41,15 @@ const MessageItem = ({
                 <>
                     {message.role === 'assistant' ? (
                         <div className="font-mono text-xs">
-                            <div className="flex items-center justify-between mb-2 border-b border-cyber-gray/50 pb-2">
-                                <div className="flex items-center gap-2 text-cyber-neon">
+                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2 border-b border-cyber-gray/50 pb-2">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-cyber-neon">
                                     <Terminal className="w-3 h-3" aria-hidden="true" />
                                     <span className="font-bold">Generated Code</span>
-                                    {message.model && <span className="text-[10px] text-gray-400 ml-2 border border-gray-700 px-1 rounded">{message.model}</span>}
+                                    {message.model && <span className="text-[10px] text-gray-400 border border-gray-700 px-1 rounded break-all">{message.model}</span>}
                                     {badge && <span className="text-[10px] text-yellow-300 border border-yellow-800 px-1 rounded" title={badge.title}>{badge.label}</span>}
                                     {onStage && <span className="text-[10px] text-green-300 border border-green-800 px-1 rounded" title="This version is the pattern in the player">on stage</span>}
                                 </div>
-                                {!readOnly && <div className="flex gap-1">
+                                {!readOnly && <div className="flex gap-1 shrink-0 ml-auto">
                                     <button
                                         onClick={onStartEdit}
                                         aria-label="Edit message"
@@ -61,7 +61,7 @@ const MessageItem = ({
                                     {hasCode && <button
                                         onClick={onLoadCode}
                                         aria-label="Use this version in the player"
-                                        className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
+                                        className="flex items-center gap-1 whitespace-nowrap bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
                                         title="Put this version of the pattern in the player"
                                     >
                                         <Play className="w-3 h-3" aria-hidden="true" />
