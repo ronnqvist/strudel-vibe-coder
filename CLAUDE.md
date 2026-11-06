@@ -82,6 +82,11 @@ Migration rules:
 - Migrations run at startup, are idempotent, and remove nothing. Example:
   `openrouter_current_code` becomes the current chat's selected revision when it differs from it.
 - Keep writing the fields older versions read (`stopped`, `truncated`, `openrouter_current_code`).
+  The one exception: when saving the current chat id or `openrouter_current_code` fails, the
+  mirror is removed (`useChats.js`), because a stale mirror would be adopted at the next start
+  and bring back an older pattern, or another chat's.
+- Code that reaches the player is always checked first (`preparePattern`), including imported
+  files; if the checker cannot load, nothing is loaded (it fails closed).
 - Export files are versioned (`CHAT_FILE_VERSION`). Every older format must keep importing, and
   import must clean every field (never trust a file).
 

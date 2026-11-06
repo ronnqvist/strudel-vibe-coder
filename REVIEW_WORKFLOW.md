@@ -15,6 +15,7 @@ the findings and fixes the confirmed ones, with a failing test first.
      reviewer.
    - Bring both reports to Claude Code. It removes duplicates, confirms what reproduces, and fixes
      what is still open.
+   - Done for `main` at `5a5b269`. Its 6 findings (G1–G6) were fixed in the follow-up PR.
 3. **Optional fact check of the prompt (Perplexity):** see below. It is cheap with a subscription.
    It checks only the Strudel facts, not the code, because it cannot run the tests.
 4. **Regenerate `HANDOFF_GROK_BUILD.md`** from the fixed commit, and give it to Grok Build.
@@ -23,6 +24,10 @@ the findings and fixes the confirmed ones, with a failing test first.
 
 Pass 1b goes before the handoff for the same reason as pass 1a: the downstream copies upstream
 modules almost verbatim, so a defect is cheapest to fix before it has been ported.
+
+Run every review in a **fresh clone** of the repository, never in a folder another agent has
+used: pass 1a left uncommitted edits in its folder, which would have been mixed into the next
+review and shown it the first reviewer's work.
 
 ## Pass 1b with Codex
 

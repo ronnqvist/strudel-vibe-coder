@@ -6,14 +6,14 @@ You are an independent reviewer. Review the **finished state** of two related ap
 
 ## What you are reviewing
 
-- **Upstream (MIT, open source):** https://github.com/ronnqvist/strudel-vibe-coder. Review `main`; the work under review landed in merged PRs #9–#12, plus any fixes made after pass 1. Record the exact commit you reviewed.
+- **Upstream (MIT, open source):** https://github.com/ronnqvist/strudel-vibe-coder. Review `main`; the work under review landed in merged PRs #9–#12, plus the fixes made after pass 1 (#14 and later). Record the exact commit you reviewed.
 - **Upstream live site:** https://ronnqvist.github.io/strudel-vibe-coder/ (GitHub Pages, deployed by `.github/workflows/pages.yml`).
 - **Downstream:** https://strudel.grok.me/ is a separate codebase built in Grok Build, synced from upstream using `HANDOFF_GROK_BUILD.md`. Its server code is not public. Review only what the deployed client shows, and say so.
 - **Background:** read `CLAUDE.md`, `README.md` and `HANDOFF_GROK_BUILD.md` in the upstream repository first. Closed issues #5, #6, #7 and #8 describe what was already fixed.
 
 ## Rules
 
-1. **Read-only.** Do not push, open pull requests, comment on or close issues, or change any settings. Write your report as a file or in your reply.
+1. **Read-only.** Do not edit, create or delete any file in the repository, except your report file if you are asked to write one. Do not commit, push, open pull requests, comment on or close issues, or change any settings. Temporary scripts go outside the repository. Write your report as a file or in your reply.
 2. **No paid calls without approval.**
    - Do not call OpenRouter, xAI or any other model API with a real key.
    - Do not use the Grok path of strudel.grok.me in a way that spends its quota.

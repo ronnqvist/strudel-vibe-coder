@@ -8,14 +8,14 @@ This pass matters because the downstream will copy upstream modules almost verba
 
 ## What you are reviewing
 
-- **Repository (MIT):** https://github.com/ronnqvist/strudel-vibe-coder, branch `main`. Record the exact commit you review. The work under review landed in merged PRs #9–#12.
+- **Repository (MIT):** https://github.com/ronnqvist/strudel-vibe-coder, branch `main`. Record the exact commit you review. The work under review landed in merged PRs #9–#12 and the review-fix PRs after them (#14 and later).
 - **Live site:** https://ronnqvist.github.io/strudel-vibe-coder/ (GitHub Pages, deployed from `main` by `.github/workflows/pages.yml`).
 - **Read first:** `CLAUDE.md`, `README.md`, `eval/README.md` and `HANDOFF_GROK_BUILD.md`.
 - **Out of scope:** strudel.grok.me itself. Do not open its Grok path or review its bundle in this pass.
 
 ## Rules
 
-1. **Read-only.** Do not push, open pull requests, comment on or close issues, or change any settings. Write your report as a file or in your reply.
+1. **Read-only.** Do not edit, create or delete any file in the repository, except your report file if you are asked to write one. Do not commit, push, open pull requests, comment on or close issues, or change any settings. Temporary scripts go outside the repository. Write your report as a file or in your reply.
 2. **No paid calls without approval.** Do not call OpenRouter or any other model API with a real key. Use the mocked tests and `npm run eval:mock`; the eval harness's live mode stays off. If a finding can only be confirmed with a live call, describe the call and mark the finding **unverified**.
 3. **Reproduce before you report.** Each finding needs reproduction steps that you actually ran: a failing test, a command and its output, or a browser script and what you saw.
 4. **Back every claim with a location.** Give file and line references as permalinks to the commit you reviewed.
