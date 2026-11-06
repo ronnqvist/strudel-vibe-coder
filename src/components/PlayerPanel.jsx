@@ -10,7 +10,7 @@ import StrudelFrame from './StrudelFrame';
  */
 const toolButton = 'px-3 py-1 rounded text-sm bg-cyber-gray text-cyber-cyan hover:bg-cyber-neon hover:text-black';
 
-const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestorePrevious, onRestorePrevious, hasMessagesWithCode, onUseLatestReply, onUseEditedCode, onFixError, canFixError }) => (
+const PlayerPanel = ({ code, chatId, visibleOnMobile, notice, onDismissNotice, canRestorePrevious, onRestorePrevious, hasMessagesWithCode, onUseLatestReply, onUseEditedCode, onFixError, canFixError }) => (
     <div
         id="stage-panel"
         className={`${visibleOnMobile ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 md:flex-none w-full md:w-1/2 md:h-full bg-black flex-col`}
@@ -35,6 +35,7 @@ const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestor
         <div className="flex-1 min-h-0">
             <StrudelFrame
                 code={code}
+                playerId={chatId}
                 actions={(
                     <>
                         {canRestorePrevious && <button onClick={onRestorePrevious} className={toolButton}>Restore previous</button>}

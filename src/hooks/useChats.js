@@ -3,7 +3,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { reportSave, saveFailureEpisode, subscribeSaveStatus } from '../lib/saveStatus';
 import { CHATS_KEY, CURRENT_CHAT_KEY, LEGACY_CODE_KEY, createChat, loadInitialChats, removeChat, resetChats, withMessageIds } from '../lib/chats';
 import { stageCode } from '../lib/revisions';
-import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile } from '../lib/chatFile';
+import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile, withoutInvalidStage } from '../lib/chatFile';
+import { patternSyntaxError } from '../lib/patternCheck';
 import { downloadText } from '../lib/download';
 
 /** Chat list state, persistence, and import/export. */
@@ -23,17 +24,26 @@ export function useChats() {
         reportSave(ok);
     }, [chats]);
 
-    useEffect(() => {
-        try { localStorage.setItem(CURRENT_CHAT_KEY, currentChatId); } catch { /* storage unavailable */ }
-    }, [currentChatId]);
-
     const currentChat = chats.find(c => c.id === currentChatId);
     const currentStageCode = stageCode(currentChat);
 
-    // Keep the key earlier versions read the player's pattern from in step with the active chat
+    // Save the current chat id, and keep the key earlier versions read the player's pattern from
+    // (the mirror) in step with that chat. At startup a mirror that differs from the current chat's
+    // pattern is adopted as an edit made by an older version, so the mirror must never be left
+    // stale: if either write fails, the mirror is removed (removing works even when storage is
+    // full) and is not written again until both writes work. Otherwise a reload would bring back an
+    // older pattern, or put another chat's pattern into the chat that opens.
     useEffect(() => {
-        try { localStorage.setItem(LEGACY_CODE_KEY, currentStageCode); } catch { /* storage unavailable */ }
-    }, [currentStageCode]);
+        let ok = true;
+        try {
+            localStorage.setItem(CURRENT_CHAT_KEY, currentChatId);
+            localStorage.setItem(LEGACY_CODE_KEY, currentStageCode);
+        } catch {
+            ok = false;
+            try { localStorage.removeItem(LEGACY_CODE_KEY); } catch { /* storage unavailable */ }
+        }
+        reportSave(ok, 'current chat');
+    }, [currentChatId, currentStageCode]);
 
     const updateChat = (id, patch) => {
         setChats(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
@@ -88,7 +98,9 @@ export function useChats() {
                 throw new ChatFileError(`This file is too large to import (limit ${MAX_CHAT_FILE_BYTES / 1024 / 1024} MB).`);
             }
             const result = parseChatFile(await file.text());
-            result.chats = result.chats.map(c => withMessageIds(c));
+            const checked = await withoutInvalidStage(result.chats, code => patternSyntaxError(code));
+            result.chats = checked.chats.map(c => withMessageIds(c));
+            result.warnings.push(...checked.warnings);
             setChats(prev => [...result.chats, ...prev]);
             setCurrentChatId(result.chats[0].id);
             onImported?.();

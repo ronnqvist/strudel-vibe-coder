@@ -8,6 +8,7 @@ import {
     describeImport,
     exportFileName,
     parseChatFile,
+    withoutInvalidStage,
 } from './chatFile';
 
 const NOW = new Date('2026-11-04T12:00:00.000Z');
@@ -201,5 +202,39 @@ describe('review F3: downstream backups', () => {
         const file = { format: CHAT_FILE_FORMAT, version: 2, chats: [{ id: 'd1', name: 'D', createdAt: '2026-01-01T00:00:00Z', messages: [{ id: 'm1', role: 'assistant', content: '```js\ns("bd")\n```', cutOff: true }] }] };
         const [c] = parseChatFile(JSON.stringify(file), opts()).chats;
         expect(c.messages[0].truncated).toBe(true);
+    });
+});
+
+describe('review G3: imported patterns that do not parse', () => {
+    const syntaxError = async (code) => (code.includes('broken') ? 'Unexpected token' : null);
+    const chat = (selected, previous) => ({
+        id: 'a', name: 'Imported', messages: [], createdAt: '2026-01-01T00:00:00.000Z',
+        revisions: [
+            { id: 'ok', code: 's("bd")', origin: 'reply', createdAt: '2026-01-01T00:00:00.000Z' },
+            { id: 'bad', code: 's("broken"', origin: 'reply', createdAt: '2026-01-01T00:00:00.000Z' },
+        ],
+        selectedRevisionId: selected, previousRevisionId: previous,
+    });
+
+    it('does not select a pattern that does not parse, keeps it in the data, and says so', async () => {
+        const { chats, warnings } = await withoutInvalidStage([chat('bad', 'ok')], syntaxError);
+        expect(chats[0].selectedRevisionId).toBeUndefined();
+        expect(chats[0].previousRevisionId).toBe('ok');
+        expect(chats[0].revisions.map(r => r.id)).toEqual(['ok', 'bad']);
+        expect(warnings).toEqual(['The pattern in the chat "Imported" has a syntax error, so it was not loaded. It is kept in the chat\'s data and in exports.']);
+    });
+
+    it('turns off "Restore previous" for a previous pattern that does not parse', async () => {
+        const { chats, warnings } = await withoutInvalidStage([chat('ok', 'bad')], syntaxError);
+        expect(chats[0].selectedRevisionId).toBe('ok');
+        expect(chats[0].previousRevisionId).toBeUndefined();
+        expect(warnings[0]).toMatch(/previous pattern in the chat "Imported" has a syntax error/);
+    });
+
+    it('leaves valid chats exactly as they are', async () => {
+        const input = [chat('ok', undefined)];
+        const { chats, warnings } = await withoutInvalidStage(input, syntaxError);
+        expect(chats[0]).toBe(input[0]);
+        expect(warnings).toEqual([]);
     });
 });

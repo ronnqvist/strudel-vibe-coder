@@ -734,3 +734,149 @@ test.describe('review F11: dialogs and contrast', () => {
         expect(ratios.limits).toBeGreaterThanOrEqual(4.5);
     });
 });
+
+test.describe('review pass 1b', () => {
+    test('G1: when the code checker cannot load, an invalid reply does not replace the pattern', async ({ page }) => {
+        await mockNetwork(page, { reply: '```js\ns("bd"\n```' }); // missing ")"
+        await page.route('**/assets/acorn-*.js', route => route.abort('failed'));
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_current_code: 's("hh")' });
+        await page.goto('./');
+        await expect.poll(async () => decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("hh")');
+
+        await page.getByLabel('Message', { exact: true }).fill('make a beat');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('alert').filter({ hasText: 'Not loaded into the player' })).toContainText('Reload the page');
+        await expect(page.getByRole('status')).toHaveText('Reply received. The pattern could not be checked and was not loaded. Reload the page.');
+        expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("hh")');
+        // the browser reports the blocked file itself; nothing else may have failed
+        expect(page.consoleErrors.length).toBeGreaterThan(0);
+        expect(page.consoleErrors.filter(e => !/Failed to load resource: net::ERR_FAILED/.test(e))).toEqual([]);
+        page.consoleErrors.length = 0;
+    });
+
+    const chatWith = (id, name, code) => ({
+        id, name, messages: [], createdAt: '2026-01-01T00:00:00.000Z',
+        revisions: [{ id: `r${id}`, code, origin: 'edited', createdAt: '2026-01-01T00:00:00.000Z' }], selectedRevisionId: `r${id}`,
+    });
+    const stage = async (page) => decodeStrudelSrc(await page.locator('iframe').getAttribute('src'));
+    // Make one localStorage key fail to save from now on (only in this page load)
+    const failSaving = (page, failingKey) => page.evaluate((k) => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === k) throw new DOMException('full', 'QuotaExceededError');
+            return original.call(this, key, value);
+        };
+    }, failingKey);
+
+    test('G2: a failed save of the player mirror does not bring back an older pattern after reload', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([chatWith('a', 'A', 's("hh")')]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: 's("hh")',
+        });
+        await page.goto('./');
+        await failSaving(page, 'openrouter_current_code');
+
+        await page.getByRole('button', { name: 'Use edited code' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Use edited code' });
+        await dialog.getByLabel('Code from the player').fill('s("sd")');
+        await dialog.getByRole('button', { name: 'Use this code' }).click();
+        await expect.poll(() => stage(page)).toBe('s("sd")');
+        await expect(page.getByRole('alert').filter({ hasText: 'could not be saved' })).toBeVisible();
+
+        await page.reload();
+        await expect.poll(() => stage(page)).toBe('s("sd")');
+    });
+
+    test('G2: a failed save of the current chat never puts another chat\'s pattern into it', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([chatWith('a', 'A', 's("aa")'), chatWith('b', 'B', 's("bb")')]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: 's("aa")',
+        });
+        await page.goto('./');
+        await failSaving(page, 'openrouter_current_chat_id');
+
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        await page.getByRole('button', { name: /^B/ }).click();
+        await expect.poll(() => stage(page)).toBe('s("bb")');
+
+        await page.reload(); // chat A opens again, since its id is what was saved
+        await expect.poll(() => stage(page)).toBe('s("aa")');
+        const chats = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
+        expect(chats.find(c => c.id === 'a').revisions.map(r => r.code)).toEqual(['s("aa")']);
+    });
+
+    test('G2: a pattern an older version wrote is still adopted', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([chatWith('a', 'A', 's("aa")')]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: 's("older")',
+        });
+        await page.goto('./');
+        await expect.poll(() => stage(page)).toBe('s("older")');
+        await page.reload(); // idempotent
+        const chats = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
+        expect(chats[0].revisions.map(r => r.code)).toEqual(['s("aa")', 's("older")']);
+    });
+});
+
+test('G3: an imported backup whose pattern does not parse does not load it, and keeps it', async ({ page }) => {
+    await mockNetwork(page);
+    await seedStorage(page, { openrouter_current_code: 's("hh")' });
+    await page.goto('./');
+    await expect.poll(async () => decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("hh")');
+    const file = { format: 'strudel-vibe-coder-chats', version: 3, chats: [{ id: 'a', name: 'Broken', messages: [], createdAt: '2026-01-01T00:00:00Z',
+        revisions: [{ id: 'bad', code: 's("bd"', origin: 'reply', createdAt: '2026-01-01T00:00:00Z' }], selectedRevisionId: 'bad' }] };
+    const dialogs = [];
+    page.on('dialog', (d) => { dialogs.push(d.message()); d.accept(); });
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await page.locator('input[type=file][accept=".json,application/json"]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toMatch(/The pattern in the chat "Broken" has a syntax error, so it was not loaded/);
+    for (const src of await page.locator('iframe').evaluateAll(els => els.map(e => e.getAttribute('src')))) expect(decodeStrudelSrc(src)).not.toBe('s("bd"');
+    const chats = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
+    const imported = chats.find(c => c.name === 'Broken');
+    expect(imported.revisions.map(r => r.code)).toEqual(['s("bd"']);
+    expect(imported.selectedRevisionId).toBeUndefined();
+});
+
+test('G4: switching to a chat with the same pattern still starts a fresh player', async ({ page }) => {
+    await mockNetwork(page);
+    const chat = (id, name) => ({ id, name, messages: [], createdAt: '2026-01-01T00:00:00.000Z',
+        revisions: [{ id: `r${id}`, code: 's("bd")', origin: 'edited', createdAt: '2026-01-01T00:00:00.000Z' }], selectedRevisionId: `r${id}` });
+    await seedStorage(page, { openrouter_chats: JSON.stringify([chat('a', 'A'), chat('b', 'B')]), openrouter_current_chat_id: 'a', openrouter_current_code: 's("bd")' });
+    await page.goto('./');
+    const before = await page.locator('iframe').elementHandle();
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await page.getByRole('button', { name: /^B/ }).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('openrouter_current_chat_id'))).toBe('b');
+    expect(await before.evaluate(el => el.isConnected)).toBe(false);
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("bd")');
+});
+
+for (const width of [320, 375, 390]) {
+    test(`G6: at ${width} px a reply and all its actions fit the conversation`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 700 });
+        await mockNetwork(page, { model: 'some-vendor/a-model-with-a-rather-long-name-v2' });
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('make a beat');
+        await page.keyboard.press('Enter');
+        const conversation = page.getByRole('region', { name: 'Conversation' });
+        const use = conversation.getByRole('button', { name: 'Use this version in the player' });
+        await expect(use).toBeVisible();
+        const sizes = await conversation.evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            const buttons = [...el.querySelectorAll('button')].filter(b => b.offsetParent).map(b => b.getBoundingClientRect());
+            const scroller = [el, ...el.querySelectorAll('*')].find(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== 'visible');
+            return { left: box.left, right: box.right, maxRight: Math.max(...buttons.map(b => b.right)), minLeft: Math.min(...buttons.map(b => b.left)), overflowing: Boolean(scroller) };
+        });
+        expect(sizes.overflowing).toBe(false);
+        expect(sizes.maxRight).toBeLessThanOrEqual(sizes.right + 0.5);
+        expect(sizes.minLeft).toBeGreaterThanOrEqual(sizes.left - 0.5);
+    });
+}
