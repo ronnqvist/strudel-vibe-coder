@@ -40,12 +40,17 @@ function statusFromFinish(finishReason, refused) {
     return 'completed'; // stop, tool_calls, null with [DONE], or a value added later
 }
 
-const KEY_PATTERNS = [/\bsk-or-[A-Za-z0-9_-]{8,}/g, /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi];
+const KEY_PATTERNS = [
+    /\bsk-or-[A-Za-z0-9_-]{8,}/g, // OpenRouter
+    /\bsk-[A-Za-z0-9_-]{16,}/g, // OpenAI, DeepSeek and others
+    /\b(xai-|gsk_)[A-Za-z0-9_-]{16,}/g, // xAI, Groq
+    /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
+];
 
 /**
  * Remove API keys from text that came from the provider or the network, before it is shown,
  * stored in the chat, exported or logged: the exact key of this request, and anything that looks
- * like an OpenRouter key or a bearer token.
+ * like a provider key (OpenRouter, OpenAI, xAI, Groq and similar) or a bearer token.
  * @param {unknown} text
  * @param {string} [apiKey]
  */
@@ -69,27 +74,39 @@ function errorInfo(err, fallback, apiKey) {
  * Ask the model for Strudel code and stream the reply.
  *
  * Never throws once the request has been made: every outcome is a result with a `status`.
- * Only a missing API key throws (before any request).
+ * Only a missing OpenRouter API key throws (before any request).
  *
- * @param {string} apiKey
- * @param {string} model OpenRouter model id
+ * @param {string} apiKey the OpenRouter key (not used with a custom `endpoint`)
+ * @param {string} model the model id
  * @param {{ role: string, content: string }[]} conversation the whole conversation so far,
  *   including the user's newest message as its last entry (it is not appended again here)
  * @param {string} [modelName] display name used in the attribution line
- * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void, systemPrompt?: string }} [options]
+ * @param {{ signal?: AbortSignal, onText?: (textSoFar: string) => void, systemPrompt?: string, endpoint?: { url: string, apiKey?: string } }} [options]
  *   `signal` stops the request; the text received so far is then returned with status `aborted`.
  *   `onText` is called with the full reply text every time it grows.
  *   `systemPrompt` is the composed prompt for this request (default: the full SYSTEM_PROMPT).
+ *   `endpoint` sends the request to a custom OpenAI-compatible endpoint instead of OpenRouter: its
+ *   chat-completions URL and its key (optional, for example for a local server). It gets only the
+ *   Content-Type and, with a key, the Authorization header, never OpenRouter's app headers.
  * @returns {Promise<GenerationResult>}
  *   `resolvedModel` is the concrete model that answered (differs from `model` for `~...-latest` aliases);
  *   `modelLabel` is what to show for it: the concrete model for an alias, the display name otherwise.
  *   `stopped` and `truncated` mirror `status` for code (and stored chats) that predate `status`.
  */
-export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText, systemPrompt = SYSTEM_PROMPT } = {}) {
-    const cleanApiKey = apiKey?.trim();
-    if (!cleanApiKey) {
+export async function generateStrudelCode(apiKey, model, conversation, modelName, { signal, onText, systemPrompt = SYSTEM_PROMPT, endpoint } = {}) {
+    const cleanApiKey = (endpoint ? endpoint.apiKey : apiKey)?.trim() || '';
+    if (!endpoint && !cleanApiKey) {
         throw new Error("API Key is required");
     }
+    const requestUrl = endpoint ? endpoint.url : OPENROUTER_API_URL;
+    const headers = endpoint
+        ? { "Content-Type": "application/json", ...(cleanApiKey && { Authorization: `Bearer ${cleanApiKey}` }) }
+        : {
+            "Authorization": `Bearer ${cleanApiKey}`,
+            "HTTP-Referer": appReferer(), // Identifies the app to OpenRouter; never includes the URL hash
+            "X-Title": "Strudel Vibe Coder", // Optional
+            "Content-Type": "application/json"
+        };
 
     const messages = [
         { role: "system", content: systemPrompt },
@@ -118,14 +135,9 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     };
 
     try {
-        const response = await fetch(OPENROUTER_API_URL, {
+        const response = await fetch(requestUrl, {
             method: "POST",
-            headers: {
-                "Authorization": `Bearer ${cleanApiKey}`,
-                "HTTP-Referer": appReferer(), // Identifies the app to OpenRouter; never includes the URL hash
-                "X-Title": "Strudel Vibe Coder", // Optional
-                "Content-Type": "application/json"
-            },
+            headers,
             body: JSON.stringify({
                 model: model,
                 messages: messages,
@@ -136,7 +148,8 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            error = failure(errorData.error, `OpenRouter API Error: ${response.status} ${response.statusText}`);
+            const statusLine = `${response.status} ${response.statusText}`.trim();
+            error = failure(errorData.error, endpoint ? `The endpoint returned an error: ${statusLine}` : `OpenRouter API Error: ${statusLine}`);
             if (error.code === undefined) error.code = response.status;
             console.error("OpenRouter Error Response:", error);
         } else {

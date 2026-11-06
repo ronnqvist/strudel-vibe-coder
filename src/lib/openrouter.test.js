@@ -422,3 +422,41 @@ describe('review G5: keys never leave in error text', () => {
         expectClean(consoleCalls().map(args => args.map(a => (a instanceof Error ? a.message : a))));
     });
 });
+
+describe('custom OpenAI-compatible endpoints', () => {
+    const endpoint = (apiKey) => ({ url: 'https://llm.example.test/v1/chat/completions', apiKey });
+
+    it('sends the request to the endpoint, with its key and without the OpenRouter headers', async () => {
+        const fetchMock = mockStream([delta('hi'), 'data: [DONE]\n\n']);
+        const result = await generateStrudelCode('', 'llama-3.3-70b', convo, 'llama-3.3-70b', { endpoint: endpoint('gsk_customkey1234567890') });
+        expect(result.status).toBe('completed');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe('https://llm.example.test/v1/chat/completions');
+        expect(init.headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer gsk_customkey1234567890' });
+        expect(JSON.parse(init.body)).toMatchObject({ model: 'llama-3.3-70b', stream: true });
+    });
+
+    it('works without a key (a local server), and sends no Authorization header then', async () => {
+        const fetchMock = mockStream([delta('hi'), 'data: [DONE]\n\n']);
+        const result = await generateStrudelCode('', 'qwen2.5-coder', convo, 'qwen2.5-coder', { endpoint: { url: 'http://localhost:11434/v1/chat/completions', apiKey: '' } });
+        expect(result.status).toBe('completed');
+        expect(fetchMock.mock.calls[0][1].headers).toEqual({ 'Content-Type': 'application/json' });
+    });
+
+    it('removes the endpoint key from an error', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'bad key gsk_customkey1234567890' } }), { status: 401, headers: { 'content-type': 'application/json' } })));
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const result = await generateStrudelCode('', 'm', convo, 'm', { endpoint: endpoint('gsk_customkey1234567890') });
+        expect(result.error.message).toBe('bad key [redacted]');
+        expect(result.error.code).toBe(401);
+    });
+
+    it('still needs an OpenRouter key when no endpoint is given', async () => {
+        await expect(generateStrudelCode('', 'm', convo, 'm')).rejects.toThrow(/API Key is required/);
+    });
+
+    it('also removes other common key shapes from error text', async () => {
+        const { redact } = await import('./openrouter');
+        expect(redact('keys sk-proj-abcdefghijklmnop1234 and xai-abcdefghijklmnopqrstuv and gsk_abcdefghijklmnop1234')).toBe('keys [redacted] and [redacted] and [redacted]');
+    });
+});
