@@ -17,8 +17,11 @@ import { MAX_URL_LENGTH, shortHash, strudelUrl } from '../lib/strudelUrl';
  *   pattern on strudel.cc in a new tab. A parent page cannot move focus into the cross-origin
  *   editor or press the embedded REPL's play overlay, so the link is the way in for keyboard
  *   and mouse users alike. The iframe stays on the page.
+ * - A new player is started (the iframe is recreated, which stops the music) when the code
+ *   changes, and when `playerId` changes: the app passes the chat id, so switching to another chat
+ *   always starts its own player, even when both chats have the same pattern.
  */
-const StrudelFrame = ({ code, actions = null }) => {
+const StrudelFrame = ({ code, playerId = '', actions = null }) => {
     const src = strudelUrl(code);
     const [copied, setCopied] = useState(false);
 
@@ -64,7 +67,7 @@ const StrudelFrame = ({ code, actions = null }) => {
                 </a>
             </div>
             <iframe
-                key={shortHash(src)}
+                key={`${playerId}:${shortHash(src)}`}
                 tabIndex={-1}
                 src={src}
                 title="Strudel live-coding REPL (strudel.cc)"

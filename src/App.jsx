@@ -382,6 +382,7 @@ function App() {
 
                 <PlayerPanel
                     code={chat.stageCode}
+                    chatId={chat.currentChatId}
                     visibleOnMobile={tab === 'stage'}
                     notice={notices[currentChatId] || ''}
                     onDismissNotice={() => setNotice(currentChatId, '')}

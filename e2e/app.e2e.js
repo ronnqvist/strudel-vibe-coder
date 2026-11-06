@@ -843,3 +843,17 @@ test('G3: an imported backup whose pattern does not parse does not load it, and 
     expect(imported.revisions.map(r => r.code)).toEqual(['s("bd"']);
     expect(imported.selectedRevisionId).toBeUndefined();
 });
+
+test('G4: switching to a chat with the same pattern still starts a fresh player', async ({ page }) => {
+    await mockNetwork(page);
+    const chat = (id, name) => ({ id, name, messages: [], createdAt: '2026-01-01T00:00:00.000Z',
+        revisions: [{ id: `r${id}`, code: 's("bd")', origin: 'edited', createdAt: '2026-01-01T00:00:00.000Z' }], selectedRevisionId: `r${id}` });
+    await seedStorage(page, { openrouter_chats: JSON.stringify([chat('a', 'A'), chat('b', 'B')]), openrouter_current_chat_id: 'a', openrouter_current_code: 's("bd")' });
+    await page.goto('./');
+    const before = await page.locator('iframe').elementHandle();
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await page.getByRole('button', { name: /^B/ }).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('openrouter_current_chat_id'))).toBe('b');
+    expect(await before.evaluate(el => el.isConnected)).toBe(false);
+    expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("bd")');
+});
