@@ -342,3 +342,31 @@ describe('generateStrudelCode: how the reply ended', () => {
         });
     });
 });
+
+describe('generateStrudelCode: the connection fails (review F2)', () => {
+    beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}));
+    const failingStream = (first) => vi.stubGlobal('fetch', vi.fn(async () => ({
+        ok: true,
+        headers: { get: () => 'text/event-stream' },
+        body: new ReadableStream({
+            start(c) { if (first) c.enqueue(enc.encode(first)); },
+            pull() { throw new TypeError('network error'); },
+        }),
+    })));
+
+    it('a connection lost after text arrived is interrupted, and keeps the text', async () => {
+        failingStream(delta('```js\ns("bd'));
+        const result = await generateStrudelCode('k', 'm', convo, 'M');
+        expect(result).toMatchObject({ status: 'interrupted', content: '```js\ns("bd' });
+    });
+
+    it('a connection lost before any text is an error', async () => {
+        failingStream('');
+        expect(await generateStrudelCode('k', 'm', convo, 'M')).toMatchObject({ status: 'error', content: '' });
+    });
+
+    it('a stream that closes with nothing at all is an error, not an empty interrupted reply', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, headers: { get: () => 'text/event-stream' }, body: new ReadableStream({ start(c) { c.close(); } }) })));
+        expect(await generateStrudelCode('k', 'm', convo, 'M')).toMatchObject({ status: 'error', error: { message: 'No response from model' } });
+    });
+});

@@ -20,7 +20,7 @@ import { useModelCatalog } from './hooks/useModelCatalog';
 import { useRequests } from './hooks/useRequests';
 import { appendMessage, nameAfterFirstMessage, updateMessage } from './lib/chats';
 import { generateId } from './lib/utils';
-import { addRevision, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
+import { addRevision, detachMessage, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
 
 function App() {
     const settings = useSettings();
@@ -42,6 +42,9 @@ function App() {
     const currentChatId = chat.currentChatId;
     const currentChatIdRef = useRef(currentChatId);
     useEffect(() => { currentChatIdRef.current = currentChatId; }, [currentChatId]);
+    // The chats as of the last render, for code that runs after an await (names, deleted chats)
+    const chatsRef = useRef(chat.chats);
+    useEffect(() => { chatsRef.current = chat.chats; }, [chat.chats]);
     const isLoading = requests.isBusy(currentChatId);
 
     const setNotice = (chatId, text) => setNotices(prev => ({ ...prev, [chatId]: text }));
@@ -72,7 +75,24 @@ function App() {
     // Switching chats: the chat being left counts as seen; the stage now shows the new chat's pattern
     const selectChat = (id) => {
         clearNews(currentChatId);
+        stopEditing();
         chat.selectChat(id);
+    };
+
+    // Deleting a chat stops its request, so it does not keep spending tokens or announce itself later
+    const deleteChat = (id) => {
+        requests.stop(id);
+        clearNews(id);
+        setNotice(id, '');
+        stopEditing();
+        chat.deleteChat(id);
+    };
+    const deleteAllChats = () => {
+        requests.busyChatIds.forEach(id => requests.stop(id));
+        stopEditing();
+        setNotices({});
+        setNews(new Set());
+        chat.deleteAllChats();
     };
 
     // A chip puts its text in the message box (it does not send, which could spend the user's credits)
@@ -111,7 +131,13 @@ function App() {
     const saveMessageEdit = () => {
         if (editingMessage.index === null) return;
         const { id, content } = editingMessage;
-        chat.updateChatWith(currentChatId, (c) => updateMessage(c, id, { content }));
+        chat.updateChatWith(currentChatId, (c) => {
+            const before = c.messages.find(m => m.id === id);
+            const next = updateMessage(c, id, { content });
+            const after = next.messages.find(m => m.id === id);
+            // its code changed: the revision made from it no longer matches it ("on stage" goes away)
+            return before && after && codeFromMessage(before) !== codeFromMessage(after) ? detachMessage(next, id) : next;
+        });
         stopEditing();
     };
 
@@ -125,7 +151,13 @@ function App() {
         const req = requests.begin(chatId);
         if (chatId === currentChatIdRef.current) setAnnouncement('Generating a reply');
         const isViewed = () => chatId === currentChatIdRef.current;
-        const chatName = () => chat.chats.find(c => c.id === chatId)?.name ?? 'another chat';
+        const stillThere = () => chatsRef.current.some(c => c.id === chatId);
+        // The chat's name as it is now (renamed meanwhile, or named after this first message)
+        const chatName = () => {
+            const c = chatsRef.current.find(x => x.id === chatId);
+            if (!c) return 'another chat';
+            return firstMessageText ? nameAfterFirstMessage(c, firstMessageText).name : c.name;
+        };
 
         try {
             // Only role and content go to the API, only of replies that completed, old patterns trimmed,
@@ -146,6 +178,9 @@ function App() {
                 systemPrompt,
             });
 
+            // The chat was deleted while the reply was arriving: nothing to add or announce
+            if (!stillThere()) return;
+
             // Stopped before anything arrived: keep the user's message, add no empty reply
             if (result.status === 'aborted' && !result.content) {
                 if (isViewed()) setAnnouncement('Generation stopped');
@@ -162,7 +197,8 @@ function App() {
             let load = 'none';
             if (result.code && canAutoLoad(result.status)) {
                 load = (await loadIntoStage(chatId, result.code, { origin: 'reply', messageId: message.id, model: message.model })) ? 'loaded' : 'invalid';
-            } else if (result.code && notLoadedNotice(result.status)) {
+            } else {
+                // Say why nothing was loaded (also for a refusal without code), or clear an older notice
                 setNotice(chatId, notLoadedNotice(result.status));
             }
             const outcome = describeOutcome(result, load);
@@ -229,9 +265,10 @@ function App() {
     /** "Fix an error": the user pasted an error the player showed; ask the model to fix the pattern on stage. */
     const fixError = async (text) => {
         if (isLoading || requests.isRunning(currentChatId)) return 'A reply is still being written in this chat. Try again when it has finished.';
-        setPasteDialog(null);
-        await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
-        return null;
+        // Keep the dialog (and the pasted error) open until the request can really be sent
+        if (!settings.effectiveApiKey) return 'Add your OpenRouter API key in Settings first. Your error text stays here.';
+        const sent = await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
+        return sent ? null : 'The error could not be sent. Try again.';
     };
 
     const restorePreviousVersion = () => {
@@ -274,16 +311,16 @@ function App() {
                         news={news}
                         busyChatIds={requests.busyChatIds}
                         onSelect={(id) => { selectChat(id); setShowChats(false); }}
-                        onNew={() => { clearNews(currentChatId); chat.createNewChat(); setShowChats(false); }}
-                        onImportFile={(file) => chat.importChatFile(file, () => setShowChats(false))}
+                        onNew={() => { clearNews(currentChatId); stopEditing(); chat.createNewChat(); setShowChats(false); }}
+                        onImportFile={(file) => { stopEditing(); chat.importChatFile(file, () => setShowChats(false)); }}
                         onExportAll={chat.exportAllChats}
                         onDeleteAll={() => {
-                            if (window.confirm("Are you sure you want to delete all chats?")) chat.deleteAllChats();
+                            if (window.confirm("Are you sure you want to delete all chats?")) deleteAllChats();
                         }}
                         onClose={() => setShowChats(false)}
                         onRename={chat.renameChat}
                         onExport={chat.exportChat}
-                        onDelete={chat.deleteChat}
+                        onDelete={deleteChat}
                     />
                 )}
 
@@ -350,6 +387,7 @@ function App() {
                     }}
                     onUseEditedCode={() => setPasteDialog('code')}
                     onFixError={() => setPasteDialog('error')}
+                    canFixError={Boolean(patternForRequest(currentChat))}
                 />
 
                 {pasteDialog === 'code' && (

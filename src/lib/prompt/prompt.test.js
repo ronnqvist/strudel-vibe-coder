@@ -65,7 +65,7 @@ describe('composeSystemPrompt', () => {
     // When this fails, the prompt text changed: bump PROMPT_VERSION (it is stored with each reply)
     // and update the hash here, so that results can be told apart by prompt version.
     it('PROMPT_VERSION matches the prompt text', () => {
-        expect({ version: PROMPT_VERSION, hash: shortHash(composeSystemPrompt({ modules: [] })) }).toEqual({ version: '2.0.0', hash: 'bec168b4' });
+        expect({ version: PROMPT_VERSION, hash: shortHash(composeSystemPrompt({ modules: [] })) }).toEqual({ version: '2.0.1', hash: '44e1c3b4' });
     });
 });
 
@@ -84,7 +84,7 @@ describe('selectModules', () => {
         ['a first draft gets samples and synthesis', { userText: 'acid techno bass', prefs: auto }, ['synthesis', 'samples']],
         ['a first draft about chords also gets harmony', { userText: 'lush ambient pads with chords', prefs: auto }, ['synthesis', 'samples', 'harmony']],
         ['a song structure request gets arrangement', { userText: 'make it a song with an intro and a drop', selectedCode: 's("bd*4")', prefs: auto }, ['samples', 'arrangement']],
-        ['a revision gets what the pattern on stage uses', { userText: 'a bit slower', selectedCode: 'n("0 2 4").scale("C:minor").s("piano")', prefs: auto }, ['harmony']],
+        ['a revision gets what the pattern on stage uses', { userText: 'a bit slower', selectedCode: 'n("0 2 4").scale("C:minor").s("piano")', prefs: auto }, ['samples', 'harmony']],
         ['a revision of a synth line', { userText: 'brighter', selectedCode: 'note("c2 g2").s("sawtooth").lpf(800)', prefs: auto }, ['synthesis']],
         ['auto: visuals only when asked', { userText: 'add some visuals', selectedCode: 's("bd*4")', prefs: auto }, ['samples', 'hydra']],
         ['auto: keeps visuals the pattern already has', { userText: 'faster', selectedCode: 'await initHydra()\nosc(10).out()\n$: s("bd*4")', prefs: auto }, ['samples', 'hydra']],
@@ -137,5 +137,22 @@ describe('boundConversation', () => {
     it('does nothing to short chats', () => {
         const short = convo.slice(0, 4);
         expect(boundConversation(short)).toBe(short);
+    });
+});
+
+describe('review F10', () => {
+    const synth = '$: note("c2 eb2").s("sawtooth")';
+    it('a revision that asks for sampled or GM instruments, or world percussion, gets the samples module', () => {
+        for (const ask of ['add a piano melody and strings', 'add tabla and bongo', 'put a church organ on top', 'add a marimba line', 'more cowbell'])
+            expect(selectModules({ userText: ask, selectedCode: synth, prefs: { visuals: 'auto' } }), ask).toContain('samples');
+    });
+    it('a pattern on stage that uses sampled instruments keeps the samples module', () => {
+        for (const code of ['note("c3").s("piano")', 'note("c3").s("gm_epiano1")', 's("breaks").speed(2)'])
+            expect(selectModules({ userText: 'faster', selectedCode: code, prefs: { visuals: 'auto' } }), code).toContain('samples');
+    });
+    it('boundConversation also trims code blocks with Windows line endings', () => {
+        const old = { role: 'assistant', content: 'Beat:\r\n```javascript\r\ns("bd*4")\r\n```\r\nEnjoy' };
+        const convo = [{ role: 'user', content: 'a' }, old, { role: 'user', content: 'b' }, { role: 'assistant', content: 'x' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'y' }, { role: 'user', content: 'd' }];
+        expect(boundConversation(convo)[1].content).toBe('Beat:\r\n[code of an earlier version omitted]\r\nEnjoy');
     });
 });

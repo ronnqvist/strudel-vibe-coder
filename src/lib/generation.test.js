@@ -36,6 +36,9 @@ describe('messageStatus', () => {
         expect(messageStatus({ role: 'assistant', content: 'Error: Invalid key' })).toBe('error');
         expect(messageStatus({ role: 'assistant', content: 'Error: in my code?', model: 'M' })).toBe('completed');
         expect(messageStatus({ role: 'assistant', content: '```js\ns("bd")\n```', model: 'M' })).toBe('completed');
+        // as strudel.grok.me stores them (review F3)
+        expect(messageStatus({ role: 'assistant', content: 'x', model: 'M', cutOff: true })).toBe('truncated');
+        expect(messageStatus({ role: 'assistant', content: 'part of a reply\n\nError: Provider disconnected', model: 'M' })).toBe('error');
     });
 });
 
@@ -70,6 +73,13 @@ describe('replyMessage', () => {
     });
     it('records the prompt version it was written with', () => {
         expect(replyMessage({ ...base, status: 'completed' }, 'X', { makeId: () => 'i', promptVersion: '2.0.0' }).promptVersion).toBe('2.0.0');
+    });
+    it('a reply that ended without text says why instead of showing an empty bubble (review F2)', () => {
+        for (const status of ['truncated', 'refused', 'interrupted']) {
+            const m = replyMessage({ ...base, content: '', code: null, status }, 'X', id);
+            expect(m.content.trim(), status).not.toBe('');
+            expect(m.status).toBe(status);
+        }
     });
     it('an error after some text keeps the text and the error message', () => {
         expect(replyMessage({ ...base, content: 'part', status: 'error', error: { message: 'boom' } }, 'X', id)).toMatchObject({ content: 'part', error: 'boom', model: 'M' });

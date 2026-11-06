@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { expect, test } from '@playwright/test';
-import { decodeStrudelSrc, delayedReply, mockNetwork, seedStorage } from './helpers.js';
+import { decodeStrudelSrc, delayedReply, mockNetwork, seedStorage, sseBody } from './helpers.js';
 
 const CODE = 's("bd sd")';
 
@@ -524,7 +524,7 @@ test.describe('the system prompt is composed per request (#8)', () => {
         expect(system.content).toMatch(/someone new to live coding/);
 
         const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats'))[0].messages);
-        expect(saved.filter(m => m.role === 'assistant').every(m => m.promptVersion === '2.0.0')).toBe(true);
+        expect(saved.filter(m => m.role === 'assistant').every(m => m.promptVersion === '2.0.1')).toBe(true);
     });
 });
 
@@ -597,4 +597,140 @@ test('pressing Enter twice quickly sends one request', async ({ page }) => {
     expect(counter.requests).toBe(1);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats'))[0].messages.map(m => m.role));
     expect(saved).toEqual(['user', 'assistant']);
+});
+
+test.describe('review findings (Antigravity pass 1)', () => {
+    const key = { openrouter_api_key: 'sk-or-v1-test' };
+
+    test('F4: deleting a chat while it is writing stops its request and announces nothing', async ({ page }) => {
+        await mockNetwork(page);
+        await delayedReply(page, '```js\ns("bd")\n```', { ms: 1500 });
+        await seedStorage(page, { ...key, openrouter_chats: JSON.stringify([{ id: 'a', name: 'A', createdAt: '2026-01-01T00:00:00Z', messages: [] }, { id: 'b', name: 'B', createdAt: '2026-01-01T00:00:00Z', messages: [] }]), openrouter_current_chat_id: 'a' });
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('beat');
+        await page.keyboard.press('Enter');
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        page.once('dialog', (d) => d.accept());
+        await page.getByRole('button', { name: /^Delete chat (A|beat)/ }).click();
+        await page.waitForTimeout(2500);
+        await expect(page.getByRole('status')).not.toHaveText(/A reply finished/);
+        const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')).map(c => c.id));
+        expect(saved).toEqual(['b']);
+    });
+
+    test('F5: a background reply is announced under the chat\'s current name', async ({ page }) => {
+        await mockNetwork(page);
+        await delayedReply(page, '```js\ns("bd")\n```', { ms: 1500 });
+        await seedStorage(page, { ...key, openrouter_chats: JSON.stringify([{ id: 'a', name: 'New Chat', createdAt: '2026-01-01T00:00:00Z', messages: [] }, { id: 'b', name: 'B', createdAt: '2026-01-01T00:00:00Z', messages: [] }]), openrouter_current_chat_id: 'a' });
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('Acid bassline');
+        await page.keyboard.press('Enter');
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        await page.getByRole('button', { name: /^B\b/ }).first().click();
+        await expect(page.getByRole('status')).toHaveText(/A reply finished in the chat "Acid bassline"/, { timeout: 5000 });
+    });
+
+    test('F6: a refusal replaces an older notice instead of leaving it up', async ({ page }) => {
+        const replies = ['```js\ns(“bd sd”)\n```', 'I cannot help with that.'];
+        const ends = ['stop', 'content_filter'];
+        await mockNetwork(page);
+        let n = 0;
+        await page.route('https://openrouter.ai/api/v1/chat/completions', (route) => {
+            const i = n++;
+            return route.fulfill({ contentType: 'text/event-stream', headers: { 'access-control-allow-origin': '*' }, body: sseBody(replies[i], 'M', ends[i]) });
+        });
+        await seedStorage(page, key);
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('one');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('alert')).toContainText('replaced by plain ones');
+        await page.getByLabel('Message', { exact: true }).fill('two');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('alert')).toContainText('the model declined this request');
+        await expect(page.getByText('replaced by plain ones')).toHaveCount(0);
+    });
+
+    test('F7: switching chats closes an open edit', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, { ...key, openrouter_chats: JSON.stringify([
+            { id: 'a', name: 'One', createdAt: '2026-01-01T00:00:00Z', messages: [{ role: 'user', content: 'Chat One prompt' }] },
+            { id: 'b', name: 'Two', createdAt: '2026-01-01T00:00:00Z', messages: [{ role: 'user', content: 'Chat Two prompt' }] }]), openrouter_current_chat_id: 'a' });
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Edit message' }).first().click();
+        await expect(page.getByLabel('Edit message text')).toHaveValue('Chat One prompt');
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        await page.getByRole('button', { name: /^Two\b/ }).first().click();
+        await expect(page.getByLabel('Edit message text')).toHaveCount(0);
+        await expect(page.getByText('Chat Two prompt')).toBeVisible();
+    });
+
+    test('F8: "Fix an error" is not offered for the untouched starter, and keeps the pasted text when there is no key', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./'); // first visit: the starter pattern, no key
+        await expect(page.getByRole('button', { name: 'Fix an error' })).toHaveCount(0);
+        await page.getByRole('button', { name: 'Use edited code' }).click();
+        await page.getByLabel('Code from the player').fill('$: s("bd*4")');
+        await page.getByRole('button', { name: 'Use this code' }).click();
+        await page.getByRole('button', { name: 'Fix an error' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Fix an error' });
+        await dialog.getByLabel('Error message').fill('ReferenceError: x is not defined');
+        await dialog.getByRole('button', { name: 'Ask for a fix' }).click();
+        await expect(dialog.getByRole('alert')).toContainText('API key');
+        await expect(dialog.getByLabel('Error message')).toHaveValue('ReferenceError: x is not defined');
+    });
+
+    test('F13: a reply without code has no "Use this version" button', async ({ page }) => {
+        await mockNetwork(page, { reply: 'Which genre would you like?' });
+        await seedStorage(page, key);
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('x');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('status')).toHaveText('Reply received');
+        await expect(page.getByRole('button', { name: 'Use this version in the player' })).toHaveCount(0);
+    });
+});
+
+test.describe('review F11: dialogs and contrast', () => {
+    test('Escape still closes Settings after the focused button disappears', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Settings' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Configuration' });
+        await dialog.getByRole('button', { name: /^Remove bookmark/ }).first().click(); // the focused button is removed
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+    });
+
+    test('the Chats panel is modal: Tab stays inside it', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        const panel = page.getByRole('dialog', { name: 'Chats' });
+        await expect(panel).toHaveAttribute('aria-modal', 'true');
+        for (let i = 0; i < 15; i++) {
+            await page.keyboard.press('Tab');
+            expect(await page.evaluate(() => !!document.activeElement.closest('[role=dialog]'))).toBe(true);
+        }
+    });
+
+    test('small text in Settings meets 4.5:1 contrast', async ({ page }) => {
+        await mockNetwork(page);
+        await page.goto('./');
+        await page.getByRole('button', { name: 'Settings' }).click();
+        await page.getByText('Browse all OpenRouter models').click();
+        await page.getByText('Advanced: your own music instructions').click();
+        const ratios = await page.evaluate(() => {
+            // computed colours can be oklch(): let a canvas turn them into sRGB
+            const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+            const rgb = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+            const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((a, c, i) => a + c * [0.2126, 0.7152, 0.0722][i], 0);
+            const bg = (el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(0,0,0)'; };
+            const ratio = (el) => { const a = lum(rgb(getComputedStyle(el).color)), b = lum(rgb(bg(el))); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+            const counter = [...document.querySelectorAll('span')].find(s => /^\d+ \/ 2000$/.test(s.textContent.trim()));
+            const limits = [...document.querySelectorAll('span')].find(s => /context/.test(s.textContent) && /max output|context$/.test(s.textContent.trim()));
+            return { counter: counter && ratio(counter), limits: limits && ratio(limits) };
+        });
+        expect(ratios.counter).toBeGreaterThanOrEqual(4.5);
+        expect(ratios.limits).toBeGreaterThanOrEqual(4.5);
+    });
 });

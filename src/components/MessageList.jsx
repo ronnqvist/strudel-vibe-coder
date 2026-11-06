@@ -2,6 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Terminal } from 'lucide-react';
 import MessageItem from './MessageItem';
+import { codeFromMessage } from '../lib/extractCode';
 import { STARTER_PROMPTS } from '../config';
 
 /** Scrolling message column: empty state, messages, and the "generating" indicator. */
@@ -56,6 +57,7 @@ const MessageList = ({ chatId, messages, isLoading, streamingText, streamingMode
                     key={msg.id ?? idx}
                     message={msg}
                     onStage={Boolean(selectedMessageId) && msg.id === selectedMessageId}
+                    hasCode={msg.role === 'assistant' && Boolean(codeFromMessage(msg))}
                     onRetry={idx === messages.length - 1 ? onRetry : undefined}
                     isEditing={editing.index === idx}
                     editContent={editing.content}

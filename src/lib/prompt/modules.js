@@ -52,7 +52,8 @@ export const HARMONY = `# Scales and Chords
 - n("0 2 4 7").scale("C:minor") - notes from a scale (degrees counted from 0); patterned scales work too: .scale("<C:minor F:dorian>")
 - chord("<C Am F G>").voicing() - chord symbols turned into playable voicings
 - Chords by hand: note("<[c3,e3,g3] [a2,c3,e3] [f3,a3,c4]>").s("piano")
-- .off(1/8, x => x.add(7)) - layer a shifted copy (here a fifth higher) on top, for example n("0 2 4").scale("C:minor").off(1/8, x => x.add(4))
+- .off(1/8, x => x.add(note(7))) - layer a copy, shifted later by 1/8 cycle, on top; here 7 semitones (a fifth) higher: note("c3 eb3 g3").off(1/8, x => x.add(note(7)))
+- With scale degrees, shift by degrees with .scaleTranspose() after .scale(): n("0 2 4").scale("C:minor").off(1/8, x => x.scaleTranspose(4))
 - Prefer scale degrees with .scale() for melodies, so every note stays in key when you change the scale`;
 
 export const ARRANGEMENT = `# Arrangement

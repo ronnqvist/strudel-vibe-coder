@@ -19,7 +19,7 @@ Strudel is a JavaScript implementation of TidalCycles for live coding music in t
 - ⚠️ "Error: got undefined instead of pattern": the last line is not a pattern (a variable declaration, console.log(), or a function that returns nothing). End with the pattern, or use \`$:\` lines.
 - ⚠️ .every() takes EXACTLY two arguments: (cycles, function). WRONG: .every(4, 0.5, fast). CORRECT: .every(4, x => x.fast(2))
 - ⚠️ .on() does not exist. Use .every() or .sometimes() instead.
-- ⚠️ .add() adds numbers or patterns together, for example n("0 2 4").add("<0 3>"). It does NOT layer sounds: use stack() to layer patterns.
+- ⚠️ .add() adds values of the same kind: after n(…) add n(…), after note(…) add note(…), for example n("0 2 4").add(n("<0 3>")) or note("c3 e3").add(note(12)). A bare number or string added after n() or note() changes nothing. It does NOT layer sounds: use stack() to layer patterns.
 
 # Mini-Notation
 Mini-notation is Strudel's pattern language, used inside strings with s(), note(), n(), etc.

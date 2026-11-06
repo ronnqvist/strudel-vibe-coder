@@ -12,7 +12,8 @@ import { appReferer } from './urlKey';
  * @typedef {'completed' | 'interrupted' | 'truncated' | 'aborted' | 'refused' | 'error'} GenerationStatus
  *
  * - completed:   the provider said the reply is finished (`finish_reason` stop or similar, or `[DONE]`)
- * - interrupted: the stream closed without any terminal signal; the text may be cut off anywhere
+ * - interrupted: the stream closed, or the connection broke, after some text and before any
+ *                terminal signal; the text may be cut off anywhere
  * - truncated:   the provider stopped at its output-token limit (`finish_reason: "length"`)
  * - aborted:     the user stopped the request
  * - refused:     the model or provider declined (`finish_reason: "content_filter"` or a refusal)
@@ -85,6 +86,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     let usage = null;
     let refused = false;
     let terminal = false;
+    let streaming = false;
     let error = null;
     let status;
 
@@ -139,6 +141,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     terminal = true;
                 }
             } else {
+                streaming = true;
                 for await (const payload of readSSE(response.body)) {
                     if (payload === "[DONE]") {
                         terminal = true;
@@ -175,6 +178,12 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     } catch (err) {
         if (err?.name === "AbortError" || signal?.aborted) {
             status = "aborted";
+        } else if (streaming && content) {
+            // The connection broke while the reply was arriving (for example the network went away):
+            // the text so far is kept and marked as interrupted, like a stream that closed early.
+            console.error("OpenRouter stream interrupted:", err);
+            status = "interrupted";
+            error = errorInfo(err, "The connection was interrupted");
         } else {
             console.error("OpenRouter API Error:", err);
             error = errorInfo(err, "The request failed");
@@ -183,7 +192,11 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
 
     if (!status) {
         if (error) status = "error";
-        else if (!terminal) status = "interrupted";
+        else if (!terminal && !content.trim()) {
+            // The stream closed without sending anything: nothing to keep, so this is an error
+            status = "error";
+            error = { message: "No response from model" };
+        } else if (!terminal) status = "interrupted";
         else status = statusFromFinish(finishReason, refused);
     }
     if (status === "error" && !error) error = { message: "The model reported an error" };

@@ -195,3 +195,11 @@ describe('parseChatFile: format 3 (pattern revisions)', () => {
         expect(result.chats[0].revisions).toBeUndefined();
     });
 });
+
+describe('review F3: downstream backups', () => {
+    it('a message marked cutOff (as strudel.grok.me stores it) imports as truncated', () => {
+        const file = { format: CHAT_FILE_FORMAT, version: 2, chats: [{ id: 'd1', name: 'D', createdAt: '2026-01-01T00:00:00Z', messages: [{ id: 'm1', role: 'assistant', content: '```js\ns("bd")\n```', cutOff: true }] }] };
+        const [c] = parseChatFile(JSON.stringify(file), opts()).chats;
+        expect(c.messages[0].truncated).toBe(true);
+    });
+});

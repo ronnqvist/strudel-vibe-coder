@@ -40,7 +40,7 @@ const CustomInstructions = ({ value, onChange }) => {
                 className="mt-2 w-full h-24 bg-cyber-black text-white p-2 rounded border border-cyber-gray focus:border-cyber-cyan text-sm"
             />
             <div className="flex flex-wrap items-center gap-2 mt-1">
-                <span className="text-xs text-gray-500 mr-auto">{value.length} / {MAX_CUSTOM_INSTRUCTIONS}</span>
+                <span className="text-xs text-gray-400 mr-auto">{value.length} / {MAX_CUSTOM_INSTRUCTIONS}</span>
                 <button onClick={() => onChange('')} disabled={!value} className={button}>Reset</button>
                 <button onClick={() => downloadText('strudel-music-instructions.txt', value, 'text/plain')} disabled={!value} className={button}>Export</button>
                 <button onClick={() => fileInput.current?.click()} className={button}>Import</button>

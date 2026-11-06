@@ -10,7 +10,7 @@ import StrudelFrame from './StrudelFrame';
  */
 const toolButton = 'px-3 py-1 rounded text-sm bg-cyber-gray text-cyber-cyan hover:bg-cyber-neon hover:text-black';
 
-const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestorePrevious, onRestorePrevious, hasMessagesWithCode, onUseLatestReply, onUseEditedCode, onFixError }) => (
+const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestorePrevious, onRestorePrevious, hasMessagesWithCode, onUseLatestReply, onUseEditedCode, onFixError, canFixError }) => (
     <div
         id="stage-panel"
         className={`${visibleOnMobile ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 md:flex-none w-full md:w-1/2 md:h-full bg-black flex-col`}
@@ -39,7 +39,7 @@ const PlayerPanel = ({ code, visibleOnMobile, notice, onDismissNotice, canRestor
                     <>
                         {canRestorePrevious && <button onClick={onRestorePrevious} className={toolButton}>Restore previous</button>}
                         <button onClick={onUseEditedCode} className={toolButton} title="Edits made in the player are not sent back to this app. Paste them here to keep them.">Use edited code</button>
-                        {code && <button onClick={onFixError} className={toolButton} title="Paste an error shown by the player and ask the model to fix the pattern">Fix an error</button>}
+                        {canFixError && <button onClick={onFixError} className={toolButton} title="Paste an error shown by the player and ask the model to fix the pattern">Fix an error</button>}
                     </>
                 )}
             />

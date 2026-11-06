@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { generateId } from './utils';
+import { stripAttribution } from './extractCode';
 
 /**
  * Pattern revisions: the patterns a chat has put on the stage.
@@ -89,7 +90,14 @@ function trim(revisions, keep) {
 export function addRevision(chat, { code, origin, messageId, model, repaired }, { makeId = generateId, now = new Date() } = {}) {
     const revisions = Array.isArray(chat.revisions) ? chat.revisions : [];
     const existing = revisions.find(r => r.code === code);
-    if (existing) return { chat: selectRevision(chat, existing.id), revision: existing };
+    if (existing) {
+        // Same code again, from another message: reuse the revision and point it at that message
+        const moved = messageId && existing.messageId !== messageId
+            ? { ...existing, messageId, origin, ...(model && { model }) }
+            : existing;
+        const next = moved === existing ? chat : { ...chat, revisions: revisions.map(r => (r.id === existing.id ? moved : r)) };
+        return { chat: selectRevision(next, existing.id), revision: moved };
+    }
 
     const revision = {
         id: makeId(),
@@ -123,8 +131,35 @@ export function adoptLegacyCode(chat, code, options) {
     return addRevision(chat, { code, origin: 'legacy' }, options).chat;
 }
 
-/** The code to tell the model about as "the pattern in the player", or '' (the starter pattern is not the user's). */
+/**
+ * The code to tell the model about as "the pattern in the player", or ''. The untouched starter
+ * pattern of a first visit is left out, and so is the app's attribution line, so that a model
+ * revising another model's pattern does not copy the old attribution.
+ */
 export function patternForRequest(chat) {
     const revision = selectedRevision(chat);
-    return revision && revision.origin !== 'starter' ? revision.code : '';
+    if (!revision) return '';
+    // The untouched starter of a first visit is not the user's pattern. Once the chat has messages,
+    // a starter on stage (for example after "Restore previous") was put there on purpose.
+    const untouchedStarter = revision.origin === 'starter' && !chat.messages?.some(m => m.role === 'user');
+    return untouchedStarter ? '' : stripAttribution(revision.code);
+}
+
+/**
+ * A message's code was edited: its revisions no longer show what it says, so they stop pointing
+ * at it (the pattern on stage stays as it is; "Use this version" makes the edited code a revision).
+ * @param {Chat} chat
+ * @param {string} messageId
+ */
+export function detachMessage(chat, messageId) {
+    if (!chat.revisions?.some(r => r.messageId === messageId)) return chat;
+    return {
+        ...chat,
+        revisions: chat.revisions.map(r => {
+            if (r.messageId !== messageId) return r;
+            const copy = { ...r };
+            delete copy.messageId;
+            return copy;
+        }),
+    };
 }

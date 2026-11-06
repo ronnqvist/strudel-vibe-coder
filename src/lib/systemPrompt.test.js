@@ -16,7 +16,7 @@ describe('system prompt: things that used to be wrong', () => {
 
     it('does not claim that .add() does not exist, and says what it does', () => {
         expect(SYSTEM_PROMPT).not.toMatch(/\.add\(\) is not a function/);
-        expect(SYSTEM_PROMPT).toMatch(/\.add\(\) adds numbers or patterns together/);
+        expect(SYSTEM_PROMPT).toMatch(/\.add\(\) adds values of the same kind/);
     });
 
     it('describes dynamics compression with .compressor, and .compress as the time function', () => {
@@ -121,5 +121,21 @@ describe('system prompt: Strudel API facts (#8)', () => {
 
     it('every example that sets .delay() in a chain is described as a level, never as a time', () => {
         for (const m of SYSTEM_PROMPT.matchAll(/\.delay\(([^)]*)\)\s*-\s*([^\n]*)/g)) expect(m[2]).not.toMatch(/time/i);
+    });
+});
+
+describe('system prompt: pitch-shifting examples that really shift pitch (review F9)', () => {
+    // Checked 2026-11-06 in the strudel.cc REPL with queryArc: after n() / note() / .scale(), a bare
+    // number or string given to .add() changes nothing; the offset must be wrapped the same way
+    // (n(…) or note(…)), or the scale shift done with .scaleTranspose().
+    it('never adds a bare number or string after n(), note() or .scale()', () => {
+        expect(SYSTEM_PROMPT).not.toMatch(/\b(n|note)\("[^"]*"\)(\.scale\("[^"]*"\))?\.add\(\s*["\d]/);
+        expect(SYSTEM_PROMPT).not.toMatch(/\.scale\("[^"]*"\)\.off\([^)]*x\.add\(\s*\d/);
+        expect(SYSTEM_PROMPT).not.toMatch(/\.off\(1\/8, x => x\.add\(\d+\)\)/);
+    });
+    it('shows the forms that work', () => {
+        expect(SYSTEM_PROMPT).toMatch(/n\("0 2 4"\)\.add\(n\("<0 3>"\)\)/);
+        expect(SYSTEM_PROMPT).toMatch(/x => x\.add\(note\(7\)\)/);
+        expect(SYSTEM_PROMPT).toMatch(/\.scaleTranspose\(4\)/);
     });
 });

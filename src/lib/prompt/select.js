@@ -12,8 +12,10 @@ const RULES = {
         code: /\.s\(\s*["'`](sawtooth|square|triangle|sine|supersaw|pulse|white|pink|brown|crackle)|\.(fm|fmh|vib|vibmod|adsr|attack|decay|sustain|release|distort|vowel|crush)\(/,
     },
     samples: {
-        text: /\b(drums?|beat\w*|kit|kicks?|snares?|hi-?hats?|hats?|claps?|percussion|perc|breaks?|breakbeat|samples?|bank|808|909|707|606|linn|groove|rhythm|boom ?bap|techno|house|jungle|dnb|drum ?and ?bass|trap|hip ?hop)\b/i,
-        code: /\.bank\(|\bs\(\s*["'`][^"'`]*\b(bd|sd|hh|oh|cp|rim|lt|mt|ht|cr|rd|cb|sh|tb|brk)\b|\.(chop|slice|splice|begin|loopAt|fit)\(/,
+        // drums and genres, sampled and General MIDI instruments, world and auxiliary percussion
+        // (including names that do not exist, such as tabla or tom, so the module's warning applies)
+        text: /\b(drums?|beat\w*|kit|kicks?|snares?|hi-?hats?|hats?|claps?|percussion|perc|breaks?|breakbeat|samples?|sampled|bank|808|909|707|606|linn|groove|rhythm|boom ?bap|techno|house|jungle|dnb|drum ?and ?bass|trap|hip ?hop|piano|e-?piano|rhodes|organ|violins?|cello|strings|flutes?|trumpets?|brass|marimba|vibraphone|kalimba|harp|casio|bongos?|congas?|cajon|agogo|tabla|toms?|cowbell|ride|crash|shaker|tambourine|rimshot|gm)\b/i,
+        code: /\.bank\(|\bs\(\s*["'`][^"'`]*\b(bd|sd|hh|oh|cp|rim|lt|mt|ht|cr|rd|cb|sh|tb|brk|piano|casio|jazz|marimba|kalimba|harp)\b|gm_\w+|\.(chop|slice|splice|begin|end|speed|cut|loop|loopBegin|loopEnd|loopAt|fit)\(/,
     },
     harmony: {
         text: /\b(chords?|progressions?|scales?|keys?|minor|major|dorian|lydian|phrygian|mixolydian|melod\w*|harmon\w*|arpeggi\w*|arp|voicings?|jazz\w*|lush|notes?)\b/i,

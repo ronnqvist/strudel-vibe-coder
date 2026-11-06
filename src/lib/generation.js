@@ -62,16 +62,21 @@ export function announcement(result, load = 'none') {
 
 /**
  * The status of a stored message, including messages saved before `status` existed
- * (`stopped` / `truncated` flags, and error replies stored as plain "Error: ..." text).
+ * (`stopped` / `truncated` / `cutOff` flags, and error replies stored as plain "Error: ..." text or
+ * as partial text ending in "\n\nError: ...").
  * @param {{ role: string, status?: string, stopped?: boolean, truncated?: boolean, content?: string, model?: string }} message
  * @returns {GenerationStatus | undefined} undefined for user messages
  */
 export function messageStatus(message) {
     if (message?.role !== 'assistant') return undefined;
     if (STATUSES.includes(message.status)) return message.status;
-    if (message.truncated) return 'truncated';
+    if (message.truncated || message.cutOff) return 'truncated'; // cutOff: as strudel.grok.me stores it
     if (message.stopped) return 'aborted';
-    if (!message.model && typeof message.content === 'string' && message.content.startsWith('Error: ')) return 'error';
+    if (typeof message.content === 'string') {
+        if (!message.model && message.content.startsWith('Error: ')) return 'error';
+        // strudel.grok.me stored a failed reply as its partial text followed by "\n\nError: …"
+        if (/\n\nError: [^\n]*$/.test(message.content)) return 'error';
+    }
     return 'completed';
 }
 
@@ -94,12 +99,22 @@ export function apiConversation(messages) {
  * @param {string} [modelName] fallback when the result names no model
  * @param {{ makeId?: () => string, promptVersion?: string }} [options] `promptVersion`: of the system prompt used
  */
+const EMPTY_REPLY_TEXT = {
+    truncated: 'The model reached its length limit before writing any reply text.',
+    refused: 'The model declined this request.',
+    interrupted: 'The connection closed before any reply text arrived.',
+};
+
 export function replyMessage(result, modelName, { makeId = generateId, promptVersion } = {}) {
-    const plainError = result.status === 'error' && !result.content;
+    const empty = !(result.content ?? '').trim();
+    const plainError = result.status === 'error' && empty;
+    const content = plainError
+        ? `Error: ${result.error?.message || 'the request failed'}`
+        : (empty && EMPTY_REPLY_TEXT[result.status]) || result.content;
     return {
         id: makeId(),
         role: 'assistant',
-        content: plainError ? `Error: ${result.error?.message || 'the request failed'}` : result.content,
+        content,
         code: result.code ?? null,
         ...(!plainError && { model: result.modelLabel ?? modelName }),
         status: result.status,

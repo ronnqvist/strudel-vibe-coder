@@ -87,7 +87,8 @@ function cleanMessage(m) {
     const promptVersion = shortText(m.promptVersion, 20);
     if (promptVersion && /^[0-9A-Za-z.+-]+$/.test(promptVersion)) message.promptVersion = promptVersion;
     if (m.stopped === true) message.stopped = true;
-    if (m.truncated === true) message.truncated = true;
+    // strudel.grok.me marks a cut-off reply with `cutOff`; both mean the same
+    if (m.truncated === true || m.cutOff === true) message.truncated = true;
     return message;
 }
 

@@ -179,7 +179,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                                             <span className="block text-[10px] text-gray-400 font-mono truncate">
                                                 {m.id}{m.isFree ? ' · free' : ''}
                                             </span>
-                                            {formatLimits(m) && <span className="block text-[10px] text-gray-500 truncate">{formatLimits(m)}</span>}
+                                            {formatLimits(m) && <span className="block text-[10px] text-gray-400 truncate">{formatLimits(m)}</span>}
                                         </button>
                                         <button
                                             onClick={() => bookmark(m)}

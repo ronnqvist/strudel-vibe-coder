@@ -6,7 +6,7 @@ This brief is complete on its own: you don't need access to any repository. Wher
 
 - Upstream: https://github.com/ronnqvist/strudel-vibe-coder (MIT, Copyright (c) 2025-2026 Simon Rönnqvist).
 - The **previous sync** was based on upstream commit `250786e6cbd6ba923d846a186ddfa948574784c9`. This brief is a **delta** from that commit.
-- The **implementation** this brief describes is upstream commit `4df8366285ba6535376564a660e544a2f042f6ec`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
+- The **implementation** this brief describes is upstream commit `d85e52d9990526c9a7ddc1ff94f4a927ee888f75`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
 - Strudel is a separate AGPL-3.0 project. The app opens https://strudel.cc in an iframe. Do not bundle Strudel code, do not add `@strudel/embed`, and do not read or script the iframe. All of that is unchanged from the previous sync.
 
 The downstream app is its own codebase (TanStack Start). This is not a copy-over: keep its structure, and port the behaviour and the modules below.
@@ -50,6 +50,22 @@ The downstream app is its own codebase (TanStack Start). This is not a copy-over
    - the chat no longer jumps to the bottom while the user reads further up
    - the model list shows context and output limits
    - a quick double Enter sends one request
+10. **Fixes from an independent review of upstream (13 findings, all fixed before this handoff):**
+   - The attribution line always names the model that wrote this version, and is left out of the pattern sent to the model.
+   - A connection that breaks after text has arrived is `interrupted`, keeping the text. A stream that sends nothing is `error`. A reply that didn't complete and has no text gets a short explanation instead of an empty bubble.
+   - Imports read `cutOff`, and failed replies stored as text ending in `
+
+Error: …` count as errors (section 6).
+   - A revision reused for a new message moves to that message.
+   - Deleting a chat stops its request.
+   - Background replies are announced under the chat's current name.
+   - Notices are set or cleared on every reply.
+   - Switching chats closes an open message edit.
+   - "Fix an error" appears only when there is a pattern to send, and it keeps the pasted text if there is no key.
+   - "Use this version" appears only on replies that contain code.
+   - Two prompt examples didn't change the pitch (`.add` after `n()`, and `.off` after `.scale()`). They are corrected and checked in strudel.cc (`PROMPT_VERSION` 2.0.1).
+   - The samples module is chosen for instrument requests.
+   - Escape and Tab keep working in a dialog after its focused button disappears. The Chats panel is modal. Small text meets 4.5:1 contrast.
 
 ## 4. Check downstream for the same defects
 
@@ -93,7 +109,8 @@ import { appReferer } from './urlKey';
  * @typedef {'completed' | 'interrupted' | 'truncated' | 'aborted' | 'refused' | 'error'} GenerationStatus
  *
  * - completed:   the provider said the reply is finished (`finish_reason` stop or similar, or `[DONE]`)
- * - interrupted: the stream closed without any terminal signal; the text may be cut off anywhere
+ * - interrupted: the stream closed, or the connection broke, after some text and before any
+ *                terminal signal; the text may be cut off anywhere
  * - truncated:   the provider stopped at its output-token limit (`finish_reason: "length"`)
  * - aborted:     the user stopped the request
  * - refused:     the model or provider declined (`finish_reason: "content_filter"` or a refusal)
@@ -166,6 +183,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     let usage = null;
     let refused = false;
     let terminal = false;
+    let streaming = false;
     let error = null;
     let status;
 
@@ -220,6 +238,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     terminal = true;
                 }
             } else {
+                streaming = true;
                 for await (const payload of readSSE(response.body)) {
                     if (payload === "[DONE]") {
                         terminal = true;
@@ -256,6 +275,12 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     } catch (err) {
         if (err?.name === "AbortError" || signal?.aborted) {
             status = "aborted";
+        } else if (streaming && content) {
+            // The connection broke while the reply was arriving (for example the network went away):
+            // the text so far is kept and marked as interrupted, like a stream that closed early.
+            console.error("OpenRouter stream interrupted:", err);
+            status = "interrupted";
+            error = errorInfo(err, "The connection was interrupted");
         } else {
             console.error("OpenRouter API Error:", err);
             error = errorInfo(err, "The request failed");
@@ -264,7 +289,11 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
 
     if (!status) {
         if (error) status = "error";
-        else if (!terminal) status = "interrupted";
+        else if (!terminal && !content.trim()) {
+            // The stream closed without sending anything: nothing to keep, so this is an error
+            status = "error";
+            error = { message: "No response from model" };
+        } else if (!terminal) status = "interrupted";
         else status = statusFromFinish(finishReason, refused);
     }
     if (status === "error" && !error) error = { message: "The model reported an error" };
@@ -360,16 +389,21 @@ export function announcement(result, load = 'none') {
 
 /**
  * The status of a stored message, including messages saved before `status` existed
- * (`stopped` / `truncated` flags, and error replies stored as plain "Error: ..." text).
+ * (`stopped` / `truncated` / `cutOff` flags, and error replies stored as plain "Error: ..." text or
+ * as partial text ending in "\n\nError: ...").
  * @param {{ role: string, status?: string, stopped?: boolean, truncated?: boolean, content?: string, model?: string }} message
  * @returns {GenerationStatus | undefined} undefined for user messages
  */
 export function messageStatus(message) {
     if (message?.role !== 'assistant') return undefined;
     if (STATUSES.includes(message.status)) return message.status;
-    if (message.truncated) return 'truncated';
+    if (message.truncated || message.cutOff) return 'truncated'; // cutOff: as strudel.grok.me stores it
     if (message.stopped) return 'aborted';
-    if (!message.model && typeof message.content === 'string' && message.content.startsWith('Error: ')) return 'error';
+    if (typeof message.content === 'string') {
+        if (!message.model && message.content.startsWith('Error: ')) return 'error';
+        // strudel.grok.me stored a failed reply as its partial text followed by "\n\nError: …"
+        if (/\n\nError: [^\n]*$/.test(message.content)) return 'error';
+    }
     return 'completed';
 }
 
@@ -392,12 +426,22 @@ export function apiConversation(messages) {
  * @param {string} [modelName] fallback when the result names no model
  * @param {{ makeId?: () => string, promptVersion?: string }} [options] `promptVersion`: of the system prompt used
  */
+const EMPTY_REPLY_TEXT = {
+    truncated: 'The model reached its length limit before writing any reply text.',
+    refused: 'The model declined this request.',
+    interrupted: 'The connection closed before any reply text arrived.',
+};
+
 export function replyMessage(result, modelName, { makeId = generateId, promptVersion } = {}) {
-    const plainError = result.status === 'error' && !result.content;
+    const empty = !(result.content ?? '').trim();
+    const plainError = result.status === 'error' && empty;
+    const content = plainError
+        ? `Error: ${result.error?.message || 'the request failed'}`
+        : (empty && EMPTY_REPLY_TEXT[result.status]) || result.content;
     return {
         id: makeId(),
         role: 'assistant',
-        content: plainError ? `Error: ${result.error?.message || 'the request failed'}` : result.content,
+        content,
         code: result.code ?? null,
         ...(!plainError && { model: result.modelLabel ?? modelName }),
         status: result.status,
@@ -415,7 +459,109 @@ export function replyMessage(result, modelName, { makeId = generateId, promptVer
 
 ### 5.2 Lossless encoding and syntax-aware repair
 
-Remove `normalizeTypography` from URL building (your `vn` inside `xn`). The copy-to-clipboard fallback must also copy the exact code.
+Remove `normalizeTypography` from URL building (your `vn` inside `xn`). The copy-to-clipboard fallback must also copy the exact code. `extractCode.js` picks the code block out of a reply and handles the attribution line (`withAttribution` replaces an existing one; `stripAttribution` is used before the pattern is sent to the model). Its `attributionLine` comes from your `config` (use your own URL).
+
+#### `src/lib/extractCode.js`
+
+~~~~js
+// SPDX-License-Identifier: MIT
+import { attributionLine } from '../config';
+
+const JS_LANGUAGES = new Set(['js', 'javascript', 'strudel', 'jsx']);
+
+/**
+ * A trailing block shorter than this fraction of the longest block is treated as
+ * a side snippet ("to change the tempo use setcps(...)"), not as the updated pattern.
+ */
+const SIDE_SNIPPET_RATIO = 0.5;
+
+/**
+ * Parse the fenced code blocks of a markdown reply.
+ * A fence that is opened but never closed (reply cut off by the token limit) runs to the end.
+ * @param {string} text
+ * @returns {{ lang: string, code: string }[]}
+ */
+function parseFences(text) {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const blocks = [];
+    let current = null;
+    for (const line of lines) {
+        const open = !current && line.match(/^\s{0,3}(`{3,}|~{3,})\s*([\w+-]*)[^\n]*$/);
+        if (open) {
+            current = { fence: open[1], lang: open[2].toLowerCase(), lines: [] };
+        } else if (current) {
+            const trimmed = line.trim();
+            const closes = trimmed.length >= current.fence.length && trimmed === current.fence[0].repeat(trimmed.length);
+            if (closes) {
+                blocks.push({ lang: current.lang, code: current.lines.join('\n') });
+                current = null;
+            } else {
+                current.lines.push(line);
+            }
+        }
+    }
+    if (current) blocks.push({ lang: current.lang, code: current.lines.join('\n') });
+    return blocks;
+}
+
+/**
+ * Pick the Strudel code out of a model reply.
+ *
+ * - Only JavaScript blocks (```js, ```javascript, ```strudel) count; untagged blocks are
+ *   used only when there is no tagged JavaScript block. Shell, JSON etc. are ignored.
+ * - With several candidates, the last one wins unless it is a short side snippet compared to
+ *   the longest block, in which case the last substantial block wins.
+ * - Text without a fenced block yields '' (no guessing from prose).
+ * @param {string} content
+ * @returns {string} trimmed code, or '' when there is none
+ */
+export function extractCode(content) {
+    if (!content) return '';
+    const blocks = parseFences(content).map(b => ({ ...b, code: b.code.trim() })).filter(b => b.code);
+
+    let candidates = blocks.filter(b => JS_LANGUAGES.has(b.lang));
+    if (candidates.length === 0) candidates = blocks.filter(b => b.lang === '');
+    if (candidates.length === 0) return '';
+
+    const longest = Math.max(...candidates.map(b => b.code.length));
+    const substantial = candidates.filter(b => b.code.length >= longest * SIDE_SNIPPET_RATIO);
+    return substantial[substantial.length - 1].code;
+}
+
+/** The app's own attribution comment, when it is the first line. */
+const ATTRIBUTION_LINE = /^\/\/ Generated by .+ via https?:\/\/\S+[ \t]*(\r?\n|$)/;
+
+/**
+ * The code without the app's attribution comment on its first line (other comments are kept).
+ * @param {string} code
+ */
+export function stripAttribution(code) {
+    return (code ?? '').replace(ATTRIBUTION_LINE, '');
+}
+
+/**
+ * Put the attribution comment for `modelLabel` on top of `code`, once. An attribution line that
+ * is already there (for example kept by a model revising another model's pattern) is replaced,
+ * so the code always names the model that wrote this version. Returns '' for empty code.
+ * @param {string} code
+ * @param {string} [modelLabel] when missing, the code is returned unchanged
+ */
+export function withAttribution(code, modelLabel) {
+    if (!code) return '';
+    if (!modelLabel) return code;
+    return `${attributionLine(modelLabel)}\n${stripAttribution(code)}`;
+}
+
+/**
+ * The code a chat message stands for, as the player should get it.
+ * Reads the message text (so edits made in the chat are respected) and attributes it
+ * to the model that wrote it.
+ * @param {{ content?: string, model?: string }} message
+ */
+export function codeFromMessage(message) {
+    return withAttribution(extractCode(message?.content), message?.model);
+}
+~~~~
 
 #### `src/lib/strudelUrl.js`
 
@@ -673,6 +819,7 @@ export async function preparePattern(code, deps = {}) {
 ~~~~js
 // SPDX-License-Identifier: MIT
 import { generateId } from './utils';
+import { stripAttribution } from './extractCode';
 
 /**
  * Pattern revisions: the patterns a chat has put on the stage.
@@ -762,7 +909,14 @@ function trim(revisions, keep) {
 export function addRevision(chat, { code, origin, messageId, model, repaired }, { makeId = generateId, now = new Date() } = {}) {
     const revisions = Array.isArray(chat.revisions) ? chat.revisions : [];
     const existing = revisions.find(r => r.code === code);
-    if (existing) return { chat: selectRevision(chat, existing.id), revision: existing };
+    if (existing) {
+        // Same code again, from another message: reuse the revision and point it at that message
+        const moved = messageId && existing.messageId !== messageId
+            ? { ...existing, messageId, origin, ...(model && { model }) }
+            : existing;
+        const next = moved === existing ? chat : { ...chat, revisions: revisions.map(r => (r.id === existing.id ? moved : r)) };
+        return { chat: selectRevision(next, existing.id), revision: moved };
+    }
 
     const revision = {
         id: makeId(),
@@ -796,10 +950,37 @@ export function adoptLegacyCode(chat, code, options) {
     return addRevision(chat, { code, origin: 'legacy' }, options).chat;
 }
 
-/** The code to tell the model about as "the pattern in the player", or '' (the starter pattern is not the user's). */
+/**
+ * The code to tell the model about as "the pattern in the player", or ''. The untouched starter
+ * pattern of a first visit is left out, and so is the app's attribution line, so that a model
+ * revising another model's pattern does not copy the old attribution.
+ */
 export function patternForRequest(chat) {
     const revision = selectedRevision(chat);
-    return revision && revision.origin !== 'starter' ? revision.code : '';
+    if (!revision) return '';
+    // The untouched starter of a first visit is not the user's pattern. Once the chat has messages,
+    // a starter on stage (for example after "Restore previous") was put there on purpose.
+    const untouchedStarter = revision.origin === 'starter' && !chat.messages?.some(m => m.role === 'user');
+    return untouchedStarter ? '' : stripAttribution(revision.code);
+}
+
+/**
+ * A message's code was edited: its revisions no longer show what it says, so they stop pointing
+ * at it (the pattern on stage stays as it is; "Use this version" makes the edited code a revision).
+ * @param {Chat} chat
+ * @param {string} messageId
+ */
+export function detachMessage(chat, messageId) {
+    if (!chat.revisions?.some(r => r.messageId === messageId)) return chat;
+    return {
+        ...chat,
+        revisions: chat.revisions.map(r => {
+            if (r.messageId !== messageId) return r;
+            const copy = { ...r };
+            delete copy.messageId;
+            return copy;
+        }),
+    };
 }
 ~~~~
 
@@ -1288,7 +1469,8 @@ function cleanMessage(m) {
     const promptVersion = shortText(m.promptVersion, 20);
     if (promptVersion && /^[0-9A-Za-z.+-]+$/.test(promptVersion)) message.promptVersion = promptVersion;
     if (m.stopped === true) message.stopped = true;
-    if (m.truncated === true) message.truncated = true;
+    // strudel.grok.me marks a cut-off reply with `cutOff`; both mean the same
+    if (m.truncated === true || m.cutOff === true) message.truncated = true;
     return message;
 }
 
@@ -1442,7 +1624,7 @@ import { CORE } from './core';
 import { MODULES, MODULE_NAMES } from './modules';
 import { cleanPrefs, preferencesText } from './preferences';
 
-export const PROMPT_VERSION = '2.0.0';
+export const PROMPT_VERSION = '2.0.1';
 
 /** Longest custom music instructions accepted (characters). */
 export const MAX_CUSTOM_INSTRUCTIONS = 2000;
@@ -1511,7 +1693,7 @@ Strudel is a JavaScript implementation of TidalCycles for live coding music in t
 - ⚠️ "Error: got undefined instead of pattern": the last line is not a pattern (a variable declaration, console.log(), or a function that returns nothing). End with the pattern, or use \`$:\` lines.
 - ⚠️ .every() takes EXACTLY two arguments: (cycles, function). WRONG: .every(4, 0.5, fast). CORRECT: .every(4, x => x.fast(2))
 - ⚠️ .on() does not exist. Use .every() or .sometimes() instead.
-- ⚠️ .add() adds numbers or patterns together, for example n("0 2 4").add("<0 3>"). It does NOT layer sounds: use stack() to layer patterns.
+- ⚠️ .add() adds values of the same kind: after n(…) add n(…), after note(…) add note(…), for example n("0 2 4").add(n("<0 3>")) or note("c3 e3").add(note(12)). A bare number or string added after n() or note() changes nothing. It does NOT layer sounds: use stack() to layer patterns.
 
 # Mini-Notation
 Mini-notation is Strudel's pattern language, used inside strings with s(), note(), n(), etc.
@@ -1640,7 +1822,8 @@ export const HARMONY = `# Scales and Chords
 - n("0 2 4 7").scale("C:minor") - notes from a scale (degrees counted from 0); patterned scales work too: .scale("<C:minor F:dorian>")
 - chord("<C Am F G>").voicing() - chord symbols turned into playable voicings
 - Chords by hand: note("<[c3,e3,g3] [a2,c3,e3] [f3,a3,c4]>").s("piano")
-- .off(1/8, x => x.add(7)) - layer a shifted copy (here a fifth higher) on top, for example n("0 2 4").scale("C:minor").off(1/8, x => x.add(4))
+- .off(1/8, x => x.add(note(7))) - layer a copy, shifted later by 1/8 cycle, on top; here 7 semitones (a fifth) higher: note("c3 eb3 g3").off(1/8, x => x.add(note(7)))
+- With scale degrees, shift by degrees with .scaleTranspose() after .scale(): n("0 2 4").scale("C:minor").off(1/8, x => x.scaleTranspose(4))
 - Prefer scale degrees with .scale() for melodies, so every note stays in key when you change the scale`;
 
 export const ARRANGEMENT = `# Arrangement
@@ -1743,8 +1926,10 @@ const RULES = {
         code: /\.s\(\s*["'`](sawtooth|square|triangle|sine|supersaw|pulse|white|pink|brown|crackle)|\.(fm|fmh|vib|vibmod|adsr|attack|decay|sustain|release|distort|vowel|crush)\(/,
     },
     samples: {
-        text: /\b(drums?|beat\w*|kit|kicks?|snares?|hi-?hats?|hats?|claps?|percussion|perc|breaks?|breakbeat|samples?|bank|808|909|707|606|linn|groove|rhythm|boom ?bap|techno|house|jungle|dnb|drum ?and ?bass|trap|hip ?hop)\b/i,
-        code: /\.bank\(|\bs\(\s*["'`][^"'`]*\b(bd|sd|hh|oh|cp|rim|lt|mt|ht|cr|rd|cb|sh|tb|brk)\b|\.(chop|slice|splice|begin|loopAt|fit)\(/,
+        // drums and genres, sampled and General MIDI instruments, world and auxiliary percussion
+        // (including names that do not exist, such as tabla or tom, so the module's warning applies)
+        text: /\b(drums?|beat\w*|kit|kicks?|snares?|hi-?hats?|hats?|claps?|percussion|perc|breaks?|breakbeat|samples?|sampled|bank|808|909|707|606|linn|groove|rhythm|boom ?bap|techno|house|jungle|dnb|drum ?and ?bass|trap|hip ?hop|piano|e-?piano|rhodes|organ|violins?|cello|strings|flutes?|trumpets?|brass|marimba|vibraphone|kalimba|harp|casio|bongos?|congas?|cajon|agogo|tabla|toms?|cowbell|ride|crash|shaker|tambourine|rimshot|gm)\b/i,
+        code: /\.bank\(|\bs\(\s*["'`][^"'`]*\b(bd|sd|hh|oh|cp|rim|lt|mt|ht|cr|rd|cb|sh|tb|brk|piano|casio|jazz|marimba|kalimba|harp)\b|gm_\w+|\.(chop|slice|splice|begin|end|speed|cut|loop|loopBegin|loopEnd|loopAt|fit)\(/,
     },
     harmony: {
         text: /\b(chords?|progressions?|scales?|keys?|minor|major|dorian|lydian|phrygian|mixolydian|melod\w*|harmon\w*|arpeggi\w*|arp|voicings?|jazz\w*|lush|notes?)\b/i,
@@ -1793,7 +1978,7 @@ export function selectModules({ userText = '', selectedCode = '', prefs } = {}) 
  * request context, attached to the newest user message) and a bounded conversation history.
  */
 
-const CODE_BLOCK = /(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n\2[ \t]*(?=\n|$)/g;
+const CODE_BLOCK = /(^|\r?\n)(`{3,}|~{3,})[^\r\n]*\r?\n[\s\S]*?\r?\n\2[ \t]*(?=\r?\n|$)/g;
 
 /**
  * Put the pattern on this chat's stage in front of the newest user message, in the request only
@@ -1885,7 +2070,7 @@ import { useModelCatalog } from './hooks/useModelCatalog';
 import { useRequests } from './hooks/useRequests';
 import { appendMessage, nameAfterFirstMessage, updateMessage } from './lib/chats';
 import { generateId } from './lib/utils';
-import { addRevision, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
+import { addRevision, detachMessage, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
 
 function App() {
     const settings = useSettings();
@@ -1907,6 +2092,9 @@ function App() {
     const currentChatId = chat.currentChatId;
     const currentChatIdRef = useRef(currentChatId);
     useEffect(() => { currentChatIdRef.current = currentChatId; }, [currentChatId]);
+    // The chats as of the last render, for code that runs after an await (names, deleted chats)
+    const chatsRef = useRef(chat.chats);
+    useEffect(() => { chatsRef.current = chat.chats; }, [chat.chats]);
     const isLoading = requests.isBusy(currentChatId);
 
     const setNotice = (chatId, text) => setNotices(prev => ({ ...prev, [chatId]: text }));
@@ -1937,7 +2125,24 @@ function App() {
     // Switching chats: the chat being left counts as seen; the stage now shows the new chat's pattern
     const selectChat = (id) => {
         clearNews(currentChatId);
+        stopEditing();
         chat.selectChat(id);
+    };
+
+    // Deleting a chat stops its request, so it does not keep spending tokens or announce itself later
+    const deleteChat = (id) => {
+        requests.stop(id);
+        clearNews(id);
+        setNotice(id, '');
+        stopEditing();
+        chat.deleteChat(id);
+    };
+    const deleteAllChats = () => {
+        requests.busyChatIds.forEach(id => requests.stop(id));
+        stopEditing();
+        setNotices({});
+        setNews(new Set());
+        chat.deleteAllChats();
     };
 
     // A chip puts its text in the message box (it does not send, which could spend the user's credits)
@@ -1976,7 +2181,13 @@ function App() {
     const saveMessageEdit = () => {
         if (editingMessage.index === null) return;
         const { id, content } = editingMessage;
-        chat.updateChatWith(currentChatId, (c) => updateMessage(c, id, { content }));
+        chat.updateChatWith(currentChatId, (c) => {
+            const before = c.messages.find(m => m.id === id);
+            const next = updateMessage(c, id, { content });
+            const after = next.messages.find(m => m.id === id);
+            // its code changed: the revision made from it no longer matches it ("on stage" goes away)
+            return before && after && codeFromMessage(before) !== codeFromMessage(after) ? detachMessage(next, id) : next;
+        });
         stopEditing();
     };
 
@@ -1990,7 +2201,13 @@ function App() {
         const req = requests.begin(chatId);
         if (chatId === currentChatIdRef.current) setAnnouncement('Generating a reply');
         const isViewed = () => chatId === currentChatIdRef.current;
-        const chatName = () => chat.chats.find(c => c.id === chatId)?.name ?? 'another chat';
+        const stillThere = () => chatsRef.current.some(c => c.id === chatId);
+        // The chat's name as it is now (renamed meanwhile, or named after this first message)
+        const chatName = () => {
+            const c = chatsRef.current.find(x => x.id === chatId);
+            if (!c) return 'another chat';
+            return firstMessageText ? nameAfterFirstMessage(c, firstMessageText).name : c.name;
+        };
 
         try {
             // Only role and content go to the API, only of replies that completed, old patterns trimmed,
@@ -2011,6 +2228,9 @@ function App() {
                 systemPrompt,
             });
 
+            // The chat was deleted while the reply was arriving: nothing to add or announce
+            if (!stillThere()) return;
+
             // Stopped before anything arrived: keep the user's message, add no empty reply
             if (result.status === 'aborted' && !result.content) {
                 if (isViewed()) setAnnouncement('Generation stopped');
@@ -2027,7 +2247,8 @@ function App() {
             let load = 'none';
             if (result.code && canAutoLoad(result.status)) {
                 load = (await loadIntoStage(chatId, result.code, { origin: 'reply', messageId: message.id, model: message.model })) ? 'loaded' : 'invalid';
-            } else if (result.code && notLoadedNotice(result.status)) {
+            } else {
+                // Say why nothing was loaded (also for a refusal without code), or clear an older notice
                 setNotice(chatId, notLoadedNotice(result.status));
             }
             const outcome = describeOutcome(result, load);
@@ -2094,9 +2315,10 @@ function App() {
     /** "Fix an error": the user pasted an error the player showed; ask the model to fix the pattern on stage. */
     const fixError = async (text) => {
         if (isLoading || requests.isRunning(currentChatId)) return 'A reply is still being written in this chat. Try again when it has finished.';
-        setPasteDialog(null);
-        await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
-        return null;
+        // Keep the dialog (and the pasted error) open until the request can really be sent
+        if (!settings.effectiveApiKey) return 'Add your OpenRouter API key in Settings first. Your error text stays here.';
+        const sent = await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
+        return sent ? null : 'The error could not be sent. Try again.';
     };
 
     const restorePreviousVersion = () => {
@@ -2139,16 +2361,16 @@ function App() {
                         news={news}
                         busyChatIds={requests.busyChatIds}
                         onSelect={(id) => { selectChat(id); setShowChats(false); }}
-                        onNew={() => { clearNews(currentChatId); chat.createNewChat(); setShowChats(false); }}
-                        onImportFile={(file) => chat.importChatFile(file, () => setShowChats(false))}
+                        onNew={() => { clearNews(currentChatId); stopEditing(); chat.createNewChat(); setShowChats(false); }}
+                        onImportFile={(file) => { stopEditing(); chat.importChatFile(file, () => setShowChats(false)); }}
                         onExportAll={chat.exportAllChats}
                         onDeleteAll={() => {
-                            if (window.confirm("Are you sure you want to delete all chats?")) chat.deleteAllChats();
+                            if (window.confirm("Are you sure you want to delete all chats?")) deleteAllChats();
                         }}
                         onClose={() => setShowChats(false)}
                         onRename={chat.renameChat}
                         onExport={chat.exportChat}
-                        onDelete={chat.deleteChat}
+                        onDelete={deleteChat}
                     />
                 )}
 
@@ -2215,6 +2437,7 @@ function App() {
                     }}
                     onUseEditedCode={() => setPasteDialog('code')}
                     onFixError={() => setPasteDialog('error')}
+                    canFixError={Boolean(patternForRequest(currentChat))}
                 />
 
                 {pasteDialog === 'code' && (
@@ -2311,10 +2534,426 @@ const PasteDialog = ({ title, explanation, label, submitLabel, onSubmit, onClose
 export default PasteDialog;
 ~~~~
 
+#### `src/components/MusicSettings.jsx`
+
+~~~~jsx
+// SPDX-License-Identifier: MIT
+import React, { useId } from 'react';
+
+/** Settings that shape what the model writes: visuals and how much it explains. */
+const MusicSettings = ({ prefs, onPrefsChange, children }) => {
+    const visualsId = useId();
+    const explanationId = useId();
+    const select = 'w-full bg-cyber-black border border-cyber-gray p-2 rounded focus:border-cyber-cyan text-white';
+    return (
+        <fieldset className="mb-4 border border-cyber-gray rounded p-3">
+            <legend className="px-1 text-sm text-gray-300">Music</legend>
+            <label htmlFor={visualsId} className="block text-sm text-gray-400 mb-1">Hydra visuals</label>
+            <select id={visualsId} value={prefs.visuals} onChange={(e) => onPrefsChange({ visuals: e.target.value })} className={select}>
+                <option value="auto">When I ask for them, or the pattern has them</option>
+                <option value="always">Always</option>
+                <option value="never">Never, unless I ask</option>
+            </select>
+            <label htmlFor={explanationId} className="block text-sm text-gray-400 mt-3 mb-1">Comments and explanations</label>
+            <select id={explanationId} value={prefs.explanation} onChange={(e) => onPrefsChange({ explanation: e.target.value })} className={select}>
+                <option value="none">Minimal</option>
+                <option value="brief">Brief: what each part does</option>
+                <option value="teaching">Teaching: explain and suggest changes</option>
+            </select>
+            {children}
+        </fieldset>
+    );
+};
+
+export default MusicSettings;
+~~~~
+
+#### `src/components/CustomInstructions.jsx`
+
+~~~~jsx
+// SPDX-License-Identifier: MIT
+import React, { useId, useRef, useState } from 'react';
+import { MAX_CUSTOM_INSTRUCTIONS } from '../lib/prompt';
+import { downloadText } from '../lib/download';
+
+/**
+ * Advanced, collapsed: the user's own music instructions, added at the end of the system prompt.
+ * They add to the app's instructions; the syntax check and the provider's limits still apply.
+ */
+const CustomInstructions = ({ value, onChange }) => {
+    const fieldId = useId();
+    const fileInput = useRef(null);
+    const [problem, setProblem] = useState('');
+    const button = 'px-2 py-1 rounded text-xs bg-cyber-gray text-cyber-cyan hover:bg-cyber-neon hover:text-black disabled:opacity-40';
+
+    const importFile = async (file) => {
+        if (!file) return;
+        if (file.size > 64 * 1024) {
+            setProblem('This file is too large for music instructions.');
+            return;
+        }
+        const text = (await file.text()).slice(0, MAX_CUSTOM_INSTRUCTIONS);
+        setProblem('');
+        onChange(text);
+    };
+
+    return (
+        <details className="mt-3">
+            <summary className="cursor-pointer text-sm text-gray-400">Advanced: your own music instructions</summary>
+            <p className="mt-2 text-xs text-gray-400">
+                Added after the app's instructions, for example "prefer minor keys and slow tempos". They cannot turn off the
+                syntax check or the provider's limits. Up to {MAX_CUSTOM_INSTRUCTIONS.toLocaleString()} characters.
+            </p>
+            <label htmlFor={fieldId} className="sr-only">Your own music instructions</label>
+            <textarea
+                id={fieldId}
+                value={value}
+                maxLength={MAX_CUSTOM_INSTRUCTIONS}
+                onChange={(e) => onChange(e.target.value)}
+                className="mt-2 w-full h-24 bg-cyber-black text-white p-2 rounded border border-cyber-gray focus:border-cyber-cyan text-sm"
+            />
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+                <span className="text-xs text-gray-400 mr-auto">{value.length} / {MAX_CUSTOM_INSTRUCTIONS}</span>
+                <button onClick={() => onChange('')} disabled={!value} className={button}>Reset</button>
+                <button onClick={() => downloadText('strudel-music-instructions.txt', value, 'text/plain')} disabled={!value} className={button}>Export</button>
+                <button onClick={() => fileInput.current?.click()} className={button}>Import</button>
+                <input
+                    ref={fileInput}
+                    type="file"
+                    accept=".txt,text/plain"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="hidden"
+                    onChange={(e) => { importFile(e.target.files[0]); e.target.value = ''; }}
+                />
+            </div>
+            {problem && <p role="alert" className="mt-1 text-xs text-red-400">{problem}</p>}
+        </details>
+    );
+};
+
+export default CustomInstructions;
+~~~~
+
+Settings state, the model list (with `formatLimits` for context and output limits), and the dialog hook (the topmost dialog handles Escape and Tab even after its focused button is removed):
+
+#### `src/hooks/useSettings.js`
+
+~~~~js
+// SPDX-License-Identifier: MIT
+import { useEffect, useState } from 'react';
+import { readStorage, useLocalStorage } from './useLocalStorage';
+import { DEFAULT_MODEL_ID } from '../config';
+import { migrateBookmarks } from '../lib/models';
+import { loadApiKey, persistApiKey, persistRemember, readRemember } from '../lib/keyStorage';
+import { urlKey } from '../lib/urlKey';
+import { DEFAULT_PREFS, MAX_CUSTOM_INSTRUCTIONS, cleanPrefs } from '../lib/prompt';
+
+export const PROMPT_PREFS_KEY = 'openrouter_prompt_prefs';
+export const CUSTOM_INSTRUCTIONS_KEY = 'openrouter_custom_instructions';
+
+/**
+ * API key, active model and model bookmarks.
+ *
+ * The key comes from storage (while "remember" is on) and can be replaced for this visit by a
+ * temporary key from the address (`#sk-or-v1-…`), which is held in memory only.
+ */
+export function useSettings() {
+    const [remember, setRememberState] = useState(() => readRemember(localStorage));
+    const [apiKey, setApiKey] = useState(() => loadApiKey(localStorage));
+    const [hashApiKey, setHashApiKey] = useState(urlKey);
+    const [model, setModel] = useLocalStorage('openrouter_model', DEFAULT_MODEL_ID);
+    // Musical preferences for the prompt (visuals, explanation level); unknown values fall back to the defaults
+    const [storedPrefs, setStoredPrefs] = useLocalStorage(PROMPT_PREFS_KEY, DEFAULT_PREFS, { json: true });
+    const promptPrefs = cleanPrefs(storedPrefs);
+    const [customInstructions, setCustomInstructions] = useLocalStorage(CUSTOM_INSTRUCTIONS_KEY, '');
+    // Bookmarks are brought up to date once, at startup (see migrateBookmarks), then saved as usual.
+    const [savedModels, setSavedModels] = useState(() =>
+        migrateBookmarks(
+            readStorage('openrouter_saved_models', null, { json: true }),
+            readStorage('openrouter_model', DEFAULT_MODEL_ID),
+        ));
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('openrouter_saved_models', JSON.stringify(savedModels));
+        } catch {
+            // storage unavailable
+        }
+    }, [savedModels]);
+
+    useEffect(() => {
+        persistApiKey(localStorage, apiKey, remember);
+    }, [apiKey, remember]);
+
+    const setRemember = (value) => {
+        persistRemember(localStorage, value);
+        setRememberState(value);
+    };
+
+    /** Remove the key everywhere: storage, memory, and any temporary key from the address. */
+    const forgetKey = () => {
+        setApiKey('');
+        setHashApiKey('');
+    };
+
+    return {
+        apiKey,
+        setApiKey,
+        hashApiKey,
+        effectiveApiKey: hashApiKey || apiKey,
+        remember,
+        setRemember,
+        forgetKey,
+        model,
+        setModel,
+        savedModels,
+        setSavedModels,
+        promptPrefs,
+        customInstructions: typeof customInstructions === 'string' ? customInstructions.slice(0, MAX_CUSTOM_INSTRUCTIONS) : '',
+        setCustomInstructions: (text) => setCustomInstructions(String(text ?? '').slice(0, MAX_CUSTOM_INSTRUCTIONS)),
+        setPromptPrefs: (patch) => setStoredPrefs(prev => cleanPrefs({ ...cleanPrefs(prev), ...patch })),
+        modelName: savedModels.find(m => m.id === model)?.name || model,
+    };
+}
+~~~~
+
+#### `src/lib/models.js`
+
+~~~~js
+// SPDX-License-Identifier: MIT
+import { LEGACY_DEFAULT_BOOKMARK_IDS, MODELS_API_URL, RECOMMENDED_MODELS } from '../config';
+
+/**
+ * @typedef {{ id: string, name: string }} Bookmark
+ * @typedef {{
+ *   id: string, name: string, provider: string, isFree: boolean, isAlias: boolean,
+ *   contextLength: number | null, maxOutput: number | null, created: number
+ * }} CatalogModel
+ */
+
+/**
+ * Turn the response of OpenRouter's public model list into the models a chat can use.
+ * Left out: models that do not produce text, and `:batch` variants (asynchronous batch pricing,
+ * not for interactive chat). Anything can still be typed in by hand as a custom model id.
+ * @param {{ data?: any[] }} json
+ * @returns {CatalogModel[]}
+ */
+export function parseCatalog(json) {
+    const rows = Array.isArray(json?.data) ? json.data : [];
+    return rows
+        .filter(m => typeof m?.id === 'string' && !m.id.endsWith(':batch'))
+        .filter(m => {
+            const out = m.architecture?.output_modalities;
+            return !Array.isArray(out) || out.includes('text');
+        })
+        .map(m => ({
+            id: m.id,
+            name: typeof m.name === 'string' && m.name ? m.name : m.id,
+            provider: m.id.replace(/^~/, '').split('/')[0],
+            isFree: m.id.endsWith(':free') || (m.pricing?.prompt === '0' && m.pricing?.completion === '0'),
+            isAlias: m.id.startsWith('~'),
+            contextLength: typeof m.context_length === 'number' ? m.context_length : null,
+            maxOutput: typeof m.top_provider?.max_completion_tokens === 'number' ? m.top_provider.max_completion_tokens : null,
+            created: typeof m.created === 'number' ? m.created : 0,
+        }));
+}
+
+const tokens = (n) => (n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
+/**
+ * The limits OpenRouter reports for a model, for the model list: "200k context · 32k max output".
+ * Parts that are not reported are left out; '' when neither is.
+ * @param {Pick<CatalogModel, 'contextLength' | 'maxOutput'>} model
+ */
+export function formatLimits({ contextLength, maxOutput }) {
+    const parts = [];
+    if (contextLength > 0) parts.push(`${tokens(contextLength)} context`);
+    if (maxOutput > 0) parts.push(`${tokens(maxOutput)} max output`);
+    return parts.join(' · ');
+}
+
+/**
+ * Fetch the model list. Public endpoint: no API key is sent.
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<CatalogModel[]>}
+ */
+export async function fetchCatalog(signal) {
+    const response = await fetch(MODELS_API_URL, { signal });
+    if (!response.ok) throw new Error(`OpenRouter returned ${response.status} ${response.statusText}`.trim());
+    return parseCatalog(await response.json());
+}
+
+/**
+ * Search and filter the catalogue. All words of `query` must occur in the id or name.
+ * Newest first.
+ * @param {CatalogModel[]} models
+ * @param {{ query?: string, freeOnly?: boolean, provider?: string, aliasesOnly?: boolean }} [filters]
+ */
+export function filterModels(models, { query = '', freeOnly = false, provider = '', aliasesOnly = false } = {}) {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return models
+        .filter(m => !freeOnly || m.isFree)
+        .filter(m => !aliasesOnly || m.isAlias)
+        .filter(m => !provider || m.provider === provider)
+        .filter(m => {
+            const haystack = `${m.id} ${m.name}`.toLowerCase();
+            return words.every(w => haystack.includes(w));
+        })
+        .sort((a, b) => b.created - a.created || a.id.localeCompare(b.id));
+}
+
+/** Sorted, distinct provider names of a catalogue. */
+export function providersOf(models) {
+    return [...new Set(models.map(m => m.provider))].sort();
+}
+
+const sameIds = (a, b) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
+
+/**
+ * Bring a stored bookmark list up to date.
+ *
+ * - Nothing stored: the recommended models.
+ * - The list earlier versions started everyone with, untouched: replaced by the recommended models.
+ *   The model the user currently has selected stays bookmarked, so their visible choice does not vanish.
+ * - Any other list was customised by the user: kept exactly as it is. Nothing is ever deleted
+ *   automatically; entries that OpenRouter no longer lists are flagged in the UI instead.
+ *
+ * @param {unknown} stored value read from storage
+ * @param {string} [currentModelId] the model selected right now
+ * @returns {Bookmark[]}
+ */
+export function migrateBookmarks(stored, currentModelId) {
+    if (!Array.isArray(stored)) return RECOMMENDED_MODELS.map(m => ({ ...m }));
+
+    const entries = stored.filter(m => m && typeof m.id === 'string' && m.id);
+    const untouched = sameIds(entries.map(m => m.id), LEGACY_DEFAULT_BOOKMARK_IDS);
+    if (!untouched) return entries;
+
+    const next = RECOMMENDED_MODELS.map(m => ({ ...m }));
+    const current = entries.find(m => m.id === currentModelId);
+    if (current && !next.some(m => m.id === current.id)) next.push(current);
+    return next;
+}
+
+/**
+ * Bookmarks the catalogue does not list (retired models, typos). The caller offers to remove them.
+ * @param {Bookmark[]} bookmarks
+ * @param {Set<string>} listedIds
+ */
+export function unlistedBookmarks(bookmarks, listedIds) {
+    return bookmarks.filter(b => !listedIds.has(b.id));
+}
+
+/** Add a bookmark unless its id is there already. Returns the same array when nothing changes. */
+export function addBookmark(bookmarks, model) {
+    return bookmarks.some(b => b.id === model.id) ? bookmarks : [...bookmarks, { id: model.id, name: model.name || model.id }];
+}
+~~~~
+
+#### `src/hooks/useDialog.js`
+
+~~~~js
+// SPDX-License-Identifier: MIT
+import { useCallback, useEffect, useRef } from 'react';
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+const isVisible = (el) => el.getClientRects().length > 0;
+
+/** Open dialogs, most recent last: only the top one handles keys whose focus was lost. */
+const openDialogs = [];
+
+/**
+ * Behaviour shared by the app's dialogs and overlay panels.
+ *
+ * - on open, focus moves into the dialog (first control, or the dialog itself)
+ * - on close, focus returns to what had it before (the button that opened it)
+ * - Escape closes it; the event is marked handled so that nothing else (such as "Esc stops
+ *   generating") also reacts to the same key press
+ * - with `trap`, Tab and Shift+Tab cycle inside the dialog (use for modal dialogs)
+ *
+ * @param {{ onClose: () => void, trap?: boolean }} options
+ * @returns {{ attach: (node: HTMLElement | null) => void, onKeyDown: (e: React.KeyboardEvent) => void }}
+ *   use as `const { attach, onKeyDown } = useDialog(...)` and `<div ref={attach} onKeyDown={onKeyDown}>`
+ */
+export function useDialog({ onClose, trap = false }) {
+    const nodeRef = useRef(null);
+    const attach = useCallback((node) => { nodeRef.current = node; }, []);
+    const closeRef = useRef(onClose);
+    const trapRef = useRef(trap);
+    useEffect(() => { closeRef.current = onClose; trapRef.current = trap; });
+
+    useEffect(() => {
+        const previous = document.activeElement;
+        const node = nodeRef.current;
+        const first = node && [...node.querySelectorAll(FOCUSABLE)].find(isVisible);
+        (first || node)?.focus();
+        return () => {
+            if (previous instanceof HTMLElement && document.contains(previous)) previous.focus();
+        };
+    }, []);
+
+    // When the focused control inside the dialog disappears (for example "Remove bookmark"), focus
+    // falls back to the page and key presses no longer reach the dialog. Catch them on the document,
+    // for the topmost open dialog only, and bring focus back into the dialog.
+    useEffect(() => {
+        const self = {};
+        openDialogs.push(self);
+        const onDocumentKey = (e) => {
+            const node = nodeRef.current;
+            if (openDialogs[openDialogs.length - 1] !== self || !node || node.contains(document.activeElement)) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeRef.current();
+            } else if (e.key === 'Tab' && trapRef.current) {
+                e.preventDefault();
+                ([...node.querySelectorAll(FOCUSABLE)].find(isVisible) || node).focus();
+            }
+        };
+        document.addEventListener('keydown', onDocumentKey);
+        return () => {
+            document.removeEventListener('keydown', onDocumentKey);
+            openDialogs.splice(openDialogs.indexOf(self), 1);
+        };
+    }, []);
+
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeRef.current();
+            return;
+        }
+        if (!trap || e.key !== 'Tab' || !nodeRef.current) return;
+        const items = [...nodeRef.current.querySelectorAll(FOCUSABLE)].filter(isVisible);
+        if (items.length === 0) {
+            e.preventDefault();
+            return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        if (!nodeRef.current.contains(active)) {
+            e.preventDefault();
+            first.focus();
+        } else if (e.shiftKey && (active === first || active === nodeRef.current)) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    };
+
+    return { attach, onKeyDown };
+}
+~~~~
+
 Also port these small UI pieces, in your own design:
 - the status badges and the **Retry** button on the last unfinished reply (`statusBadge`, `messageStatus` in generation.js)
 - **Use this version** (with an "on stage" mark) on replies
-- **Restore previous**, **Use edited code** and **Fix an error** in the player bar
+- **Restore previous**, **Use edited code** and **Fix an error** in the player bar (Fix an error only when `patternForRequest(chat)` is not empty)
+- the "No pattern of this chat is in the player yet" bar with **Use latest reply**, for a chat whose stage is empty while it has replies with code
 - the one-line notice that edits made in the player stay there
 - **Open in Strudel** (new tab)
 - a dot on chats with a new pattern, and "writing a reply…" on busy chats
@@ -2334,10 +2973,15 @@ Also port these small UI pieces, in your own design:
 
   For the new keys, use `svc.promptPrefs` (JSON `{ visuals, explanation }`) and `svc.customInstructions` (a string of at most 2,000 characters).
 - **`svc.code` becomes the current chat's selected revision** (origin `legacy`) at startup, *only if it differs* from that chat's selected code. Keep writing `svc.code` with the viewed chat's stage code. That makes the migration idempotent and lets the previous version find a pattern after a rollback.
+- **Your starter pattern is not a legacy pattern.** Before this update, `svc.code` may hold your starter pattern for a user who never generated anything. If `svc.code` is exactly your starter pattern and the current chat has no messages, store it as origin `starter`, not `legacy`. Otherwise the starter is attached to the user's first request as "the pattern to change". In `loadInitialChats`, the adjusted call looks like this:
+
+  ```js
+  const isStarter = legacyCode === STARTER_PATTERN && c.messages.length === 0;
+  return isStarter && !stageCode(c) ? addRevision(c, { code: legacyCode, origin: 'starter' }).chat : adoptLegacyCode(c, legacyCode);
+  ```
 - **Messages:** give messages without an `id` one at load and at import.
-  - Downstream marks cut-off replies with `cutOff: true`. Read it as status `truncated`, and keep writing `cutOff` (as well as `stopped`) next to `status` so the previous version still marks them.
-  - In `messageStatus()`, check `message.cutOff` where upstream checks `message.truncated`.
-- **Errors:** downstream appends `\n\nError: …` to the partial text in a single message. When you port this, treat a stored message that ends with such a line as status `error`, or keep your format and store `status: 'error'` from now on.
+  - Downstream marks cut-off replies with `cutOff: true`. The shared code reads it already: `messageStatus()` treats `truncated` **or** `cutOff` as `truncated`, and `chatFile.js` imports `cutOff: true` as `truncated: true`. Keep both checks (so upstream files import too). Keep writing `cutOff` (and `stopped`) next to `status`, so the previous version still marks them.
+- **Errors:** downstream stored a failed reply as its partial text followed by `\n\nError: …`. `messageStatus()` already treats such a message as `error`, so it is not sent back to the model. From now on, store `status: 'error'` on new failures, as `replyMessage()` does.
 - **Export:** format 3 adds `revisions`, `selectedRevisionId`, `previousRevisionId`, and the message fields `id`, `status`, `finishReason`, `error`, `usage`, `revisionId` and `promptVersion`. Import must clean every field, as `chatFile.js` does. Your existing export files, and upstream's version 1, 2 and 3 files, must all import.
 - **Repair rather than crash:** corrupt JSON, a missing current chat, or the string "null" as an id fall back to the first chat, as before.
 
@@ -2355,7 +2999,7 @@ These can't be seen from the client. Confirm each one, or decide it:
 
 ## 8. Acceptance tests (automate where you can)
 
-Port the matching upstream tests (Vitest and Playwright, all with mocked providers):
+The criteria below are complete on their own. If you can see the upstream repository, port these matching tests too (Vitest and Playwright, all with mocked providers):
 - `openrouter.test.js` (end states)
 - `generation.test.js`
 - `strudelUrl.test.js` (round trip)
@@ -2379,6 +3023,11 @@ The pass criteria are:
 8. A profile from the previous version keeps its chats, its key, its model and its stage pattern after the update. The previous version's export files import.
 9. The save-failure warning appears when storage throws, and Export works.
 10. With the CSP enforced there are no `securitypolicyviolation` events in normal use, including the Grok path.
+11. After model A wrote a pattern and model B revised it, the code's first line names model B, and the pattern sent with the request has no attribution line.
+12. Going offline while a reply streams leaves it `interrupted`, with its text kept. A stream that closes with nothing is an error with a message, never an empty bubble.
+13. Deleting a chat that is still writing a reply stops that request, and nothing is announced for it afterwards.
+14. A downstream backup with `cutOff: true` imports as cut off. A first visit's starter pattern is not sent as "the pattern in the player".
+15. In Settings, removing a bookmark and then pressing Escape closes the dialog. Tab stays inside the Chats panel.
 
 ## 9. Manual checklist (deployed app)
 
