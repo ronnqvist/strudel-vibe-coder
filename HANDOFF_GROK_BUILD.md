@@ -6,7 +6,7 @@ This brief is complete on its own: you don't need access to any repository. Wher
 
 - Upstream: https://github.com/ronnqvist/strudel-vibe-coder (MIT, Copyright (c) 2025-2026 Simon Rönnqvist).
 - The **previous sync** was based on upstream commit `250786e6cbd6ba923d846a186ddfa948574784c9`. This brief is a **delta** from that commit.
-- The **implementation** this brief describes is upstream commit `43aa706f7205c20a67f38f597c43f2063e5cf361`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
+- The **implementation** this brief describes is upstream commit `103ce9fd4a78eda4d86a98c21c86e7138f6649d9`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
 - Strudel is a separate AGPL-3.0 project. The app opens https://strudel.cc in an iframe. Do not bundle Strudel code, do not add `@strudel/embed`, and do not read or script the iframe. All of that is unchanged from the previous sync.
 
 The downstream app is its own codebase (TanStack Start). This is not a copy-over: keep its structure, and port the behaviour and the modules below.
@@ -73,6 +73,7 @@ Error: …` count as errors (section 6).
    - Switching chats always starts a fresh player, even when both chats have the same pattern.
    - API keys are removed from provider and network errors before they are shown, stored, exported or logged.
    - The reply header wraps on narrow phones.
+12. **A fact check of the prompt against strudel.cc/learn** (each point checked in the real REPL): the `.mask` example now mutes the cycle it describes; patterns on one orbit overwrite each other's delay and reverb unpredictably; a `let`/`const` holding a pattern is allowed; default sounds are "loaded by default"; the lowpass range and the chaining order are worded as the docs give them. `PROMPT_VERSION` is now **2.0.2**; the system prompt you use on the Grok path must be this one.
 
 ## 4. Check downstream for the same defects
 
@@ -1725,7 +1726,7 @@ import { CORE } from './core';
 import { MODULES, MODULE_NAMES } from './modules';
 import { cleanPrefs, preferencesText } from './preferences';
 
-export const PROMPT_VERSION = '2.0.1';
+export const PROMPT_VERSION = '2.0.2';
 
 /** Longest custom music instructions accepted (characters). */
 export const MAX_CUSTOM_INSTRUCTIONS = 2000;
@@ -1785,7 +1786,7 @@ Strudel is a JavaScript implementation of TidalCycles for live coding music in t
 ## ❌ Do Not Use
 - ❌ NO standard JavaScript loops: for, while, forEach
 - ❌ NO Math.random() - use Strudel's randomness functions instead
-- ❌ NO imperative state management or variables for pattern generation
+- ❌ NO imperative state or step-by-step timing logic; build patterns with pattern functions. A \`let\` or \`const\` holding a pattern or a mini-notation string to reuse is fine
 - ❌ NO setInterval, setTimeout, or other timing functions
 - ❌ NO nested function calls like s("piano", note("c e g"))
 - ❌ NO invented functions: prefer the functions described here. Other functions documented in the Strudel reference are fine, but never guess a function name, and never use browser or Node APIs (DOM, fetch, timers).
@@ -1821,7 +1822,7 @@ Mini-notation is Strudel's pattern language, used inside strings with s(), note(
 - silence - a pattern that plays nothing (a constant: write silence, not silence())
 - run(n) - ascending sequence 0 to n-1
 - Waveforms for synths: sawtooth, square, triangle, sine, supersaw, pulse; noise: white, pink, brown, crackle. Usage: note("c e g").s("sawtooth")
-- Chain methods in this order: create (s, note, n) → sound (.s, .bank) → effects (.lpf, .room, .delay) → time (.fast, .slow, .every). Example: note("c e g").s("sawtooth").lpf(800).fast(2)
+- For readability, chain methods as: create (s, note, n) → sound (.s, .bank) → effects (.lpf, .room, .delay) → time (.fast, .slow, .every). This is a convention: effects are applied in Strudel's own fixed order whatever the chain order. Example: note("c e g").s("sawtooth").lpf(800).fast(2)
 
 ## Signals and Randomness
 - sine, saw, tri, square, perlin, rand - continuous signals between 0 and 1; .range(low, high) rescales them, for example .lpf(sine.range(400, 4000).slow(4))
@@ -1839,12 +1840,12 @@ Mini-notation is Strudel's pattern language, used inside strings with s(), note(
 # Mixing Basics
 - .gain(level) - volume (0-1, can go higher); .velocity(level) - velocity from 0 to 1, multiplied with gain
 - .pan(position) - 0=left, 0.5=center, 1=right; .jux(fn) - apply function to right channel only; .juxBy(amount, fn) - partial stereo separation
-- .lpf(freq) - lowpass filter (20-20000 Hz); .hpf(freq) - highpass; .bpf(freq) - bandpass
+- .lpf(freq) - lowpass filter cutoff in Hz (audible up to 20000); .hpf(freq) - highpass; .bpf(freq) - bandpass
 - .lpq(resonance) - lowpass resonance (0-50); .hpq(resonance) - highpass resonance (0-50); .bpq(resonance) - bandpass resonance
 - .compressor("threshold:ratio:knee:attack:release") - dynamics compressor, for example .compressor("-20:20:10:.002:.02"). (.compress(start, end) is NOT dynamics compression: it squeezes the events into part of each cycle)
 
 ## Delay and Reverb (Shared per Orbit)
-Patterns on the same orbit (the default is 1) share one delay and one reverb, so the last setting wins. Give patterns that need different delay or reverb settings their own orbit: .orbit(2).
+Patterns on the same orbit (the default is 1) share one delay and one reverb, so their settings overwrite each other unpredictably. Give patterns that need different delay or reverb settings their own orbit: .orbit(2).
 - .delay(level) - how loud the echoes are (0-1)
 - .delaytime(seconds) - time between echoes in seconds, for example .delaytime(0.25)
 - .delayfeedback(amount) - how much each echo feeds the next (0-1; 1 or more keeps getting louder)
@@ -1895,7 +1896,7 @@ export const SYNTHESIS = `# Synthesis
 - .phaser(speed) - phaser effect; .phaserdepth(amount) - phaser depth`;
 
 export const SAMPLES = `# Samples and Drum Machines
-## Default Sounds (Always Available)
+## Default Sounds (Loaded by Default)
 Drums: bd (kick), sd (snare), hh (closed hi-hat), oh (open hi-hat), cp (clap), rim (rimshot), ht / mt / lt (high / mid / low tom), cr (crash), rd (ride), cb (cowbell), sh (shaker), tb (tambourine), brk (break), misc
 Other samples: clap, jazz, casio, piano, plus world and orchestral percussion such as agogo, bongo, conga, cajon, marimba, kalimba, harp
 General MIDI instruments are named gm_<instrument>, for example gm_acoustic_bass, gm_electric_bass_finger, gm_piano, gm_epiano1, gm_violin, gm_string_ensemble_1, gm_synth_strings_1, gm_pad_warm, gm_lead_2_sawtooth, gm_flute, gm_marimba, gm_vibraphone, gm_church_organ, gm_trumpet
@@ -1925,12 +1926,12 @@ export const HARMONY = `# Scales and Chords
 - Chords by hand: note("<[c3,e3,g3] [a2,c3,e3] [f3,a3,c4]>").s("piano")
 - .off(1/8, x => x.add(note(7))) - layer a copy, shifted later by 1/8 cycle, on top; here 7 semitones (a fifth) higher: note("c3 eb3 g3").off(1/8, x => x.add(note(7)))
 - With scale degrees, shift by degrees with .scaleTranspose() after .scale(): n("0 2 4").scale("C:minor").off(1/8, x => x.scaleTranspose(4))
-- Prefer scale degrees with .scale() for melodies, so every note stays in key when you change the scale`;
+- Prefer plain scale degrees with .scale() for melodies, so the notes follow the scale when you change it (a degree with a sharp or flat, such as "2#", leaves the scale on purpose)`;
 
 export const ARRANGEMENT = `# Arrangement
 - arrange([4, a], [2, b]) - play pattern a for 4 cycles, then b for 2 cycles, and repeat: arrange([4, "<c a f e>(3,8)"], [2, "<g a>(5,8)"]).note()
 - cat(a, b) - one pattern per cycle; "<a b>" in mini-notation alternates per cycle; "<a b>/2" changes every 2 cycles
-- .mask("<1 1 0 1>") - silence a layer in some cycles (0 or ~ mutes), for example a hi-hat that drops out every fourth cycle
+- .mask("<1 1 1 0>") - silence a layer in some cycles (0 or ~ mutes), for example a hi-hat that drops out every fourth cycle
 - .every(n, fn), .firstOf(n, fn), .lastOf(n, fn) - change something once every n cycles, for a fill or a variation
 - Build a track as named layers, then combine them:
   stack(
