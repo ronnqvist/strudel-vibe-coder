@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateStrudelCode } from './openrouter';
+import { replyMessage } from './generation';
+import { buildExport } from './chatFile';
 
 const enc = new TextEncoder();
 const sseChunk = (obj) => `data: ${typeof obj === 'string' ? obj : JSON.stringify(obj)}\n\n`;
@@ -368,5 +370,55 @@ describe('generateStrudelCode: the connection fails (review F2)', () => {
     it('a stream that closes with nothing at all is an error, not an empty interrupted reply', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, headers: { get: () => 'text/event-stream' }, body: new ReadableStream({ start(c) { c.close(); } }) })));
         expect(await generateStrudelCode('k', 'm', convo, 'M')).toMatchObject({ status: 'error', error: { message: 'No response from model' } });
+    });
+});
+
+describe('review G5: keys never leave in error text', () => {
+    const KEY = 'sk-or-v1-REVIEW-FAKE-KEY-0123456789';
+    const OTHER = 'sk-or-v1-another-fake-key-abcdef';
+    const expectClean = (value) => {
+        const text = JSON.stringify(value);
+        expect(text).not.toContain(KEY);
+        expect(text).not.toContain(OTHER);
+        expect(text).not.toMatch(/Bearer [A-Za-z0-9]/);
+    };
+    const consoleCalls = () => console.error.mock.calls;
+
+    beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+
+    it('an HTTP error that echoes the key', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+            error: { message: `Invalid key: ${KEY} (also ${OTHER}, Authorization: Bearer ${KEY})`, code: 401, metadata: { raw: KEY } },
+        }), { status: 401, headers: { 'content-type': 'application/json' } })));
+        const result = await generateStrudelCode(KEY, 'm', convo, 'M');
+        expect(result.status).toBe('error');
+        expect(result.error.message).toMatch(/^Invalid key: \[redacted\]/);
+        expect(result.error.code).toBe(401);
+        expectClean(result);
+        expectClean(consoleCalls());
+        expectClean(buildExport([{ id: 'a', name: 'A', createdAt: '2026-01-01T00:00:00.000Z', messages: [replyMessage(result, 'M')] }]));
+    });
+
+    it('a JSON body with an error and no reply', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: `bad ${KEY}` } }), { status: 200, headers: { 'content-type': 'application/json' } })));
+        const result = await generateStrudelCode(KEY, 'm', convo, 'M');
+        expect(result.error.message).toBe('bad [redacted]');
+        expectClean(result);
+    });
+
+    it('an error chunk in the stream', async () => {
+        mockStream([delta('Here:'), sseChunk({ error: { message: `upstream rejected ${KEY}`, code: 502 } })]);
+        const result = await generateStrudelCode(KEY, 'm', convo, 'M');
+        expect(result.status).toBe('error');
+        expect(result.error.message).toBe('upstream rejected [redacted]');
+        expectClean(result);
+    });
+
+    it('a failed request whose error names the key', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError(`fetch failed for ${KEY}`); }));
+        const result = await generateStrudelCode(KEY, 'm', convo, 'M');
+        expect(result.error.message).toBe('fetch failed for [redacted]');
+        expectClean(result);
+        expectClean(consoleCalls().map(args => args.map(a => (a instanceof Error ? a.message : a))));
     });
 });

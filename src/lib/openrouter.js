@@ -40,11 +40,28 @@ function statusFromFinish(finishReason, refused) {
     return 'completed'; // stop, tool_calls, null with [DONE], or a value added later
 }
 
-function errorInfo(err, fallback) {
-    const info = { message: err?.message || fallback };
-    if (err?.code !== undefined) info.code = err.code;
+const KEY_PATTERNS = [/\bsk-or-[A-Za-z0-9_-]{8,}/g, /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi];
+
+/**
+ * Remove API keys from text that came from the provider or the network, before it is shown,
+ * stored in the chat, exported or logged: the exact key of this request, and anything that looks
+ * like an OpenRouter key or a bearer token.
+ * @param {unknown} text
+ * @param {string} [apiKey]
+ */
+export function redact(text, apiKey) {
+    if (typeof text !== 'string') return text;
+    let out = apiKey && apiKey.length >= 8 ? text.split(apiKey).join('[redacted]') : text;
+    for (const pattern of KEY_PATTERNS) out = out.replace(pattern, '[redacted]');
+    return out;
+}
+
+/** The parts of a provider error that are kept: message, code and type, with keys removed. */
+function errorInfo(err, fallback, apiKey) {
+    const info = { message: redact(err?.message || fallback, apiKey) };
+    if (err?.code !== undefined) info.code = redact(err.code, apiKey);
     const type = err?.metadata?.error_type ?? err?.type;
-    if (type) info.type = type;
+    if (type) info.type = redact(type, apiKey);
     return info;
 }
 
@@ -90,6 +107,10 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
     let error = null;
     let status;
 
+    // Errors keep only a cleaned summary (see errorInfo), and only that is logged: a raw error
+    // body or exception could contain the key
+    const failure = (err, fallback) => errorInfo(err, fallback, cleanApiKey);
+
     const grow = (text) => {
         if (!text) return;
         content += text;
@@ -115,9 +136,9 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error("OpenRouter Error Response:", errorData);
-            error = errorInfo(errorData.error, `OpenRouter API Error: ${response.status} ${response.statusText}`);
+            error = failure(errorData.error, `OpenRouter API Error: ${response.status} ${response.statusText}`);
             if (error.code === undefined) error.code = response.status;
+            console.error("OpenRouter Error Response:", error);
         } else {
             const contentType = response.headers?.get?.("content-type") || "";
             if (contentType.includes("application/json") || !response.body) {
@@ -128,7 +149,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                 usage = data.usage || null;
                 const choice = data.choices?.[0];
                 if (data.error && !choice) {
-                    error = errorInfo(data.error, "The model reported an error");
+                    error = failure(data.error, "The model reported an error");
                 } else if (!choice) {
                     error = { message: "No response from model" };
                 } else {
@@ -137,7 +158,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     grow(choice.message?.content || refusal || "");
                     finishReason = choice.finish_reason || null;
                     nativeFinishReason = choice.native_finish_reason || null;
-                    if (data.error) error = errorInfo(data.error, "The model reported an error");
+                    if (data.error) error = failure(data.error, "The model reported an error");
                     terminal = true;
                 }
             } else {
@@ -155,7 +176,7 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
                     }
                     if (chunk.error) {
                         // Mid-stream failure: OpenRouter ends the stream after this event (HTTP status stays 200)
-                        error = errorInfo(chunk.error, "The model reported an error");
+                        error = failure(chunk.error, "The model reported an error");
                         break;
                     }
                     resolvedModel = chunk.model || resolvedModel;
@@ -181,12 +202,12 @@ export async function generateStrudelCode(apiKey, model, conversation, modelName
         } else if (streaming && content) {
             // The connection broke while the reply was arriving (for example the network went away):
             // the text so far is kept and marked as interrupted, like a stream that closed early.
-            console.error("OpenRouter stream interrupted:", err);
             status = "interrupted";
-            error = errorInfo(err, "The connection was interrupted");
+            error = failure(err, "The connection was interrupted");
+            console.error("OpenRouter stream interrupted:", error);
         } else {
-            console.error("OpenRouter API Error:", err);
-            error = errorInfo(err, "The request failed");
+            error = failure(err, "The request failed");
+            console.error("OpenRouter API Error:", error);
         }
     }
 
