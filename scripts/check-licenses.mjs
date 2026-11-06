@@ -9,26 +9,13 @@
  *
  * Usage: npm run licenses
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { dirname, join } from 'node:path';
+import { packageOf } from './packageOf.js';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
 const ALLOWED = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD']);
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-/** Find the package.json that owns a file inside node_modules. */
-function packageOf(file) {
-    const marker = `${sep}node_modules${sep}`;
-    const at = file.lastIndexOf(marker);
-    if (at === -1) return null;
-    const rest = file.slice(at + marker.length).split(sep);
-    const name = rest[0].startsWith('@') ? `${rest[0]}/${rest[1]}` : rest[0];
-    const pkgJson = join(file.slice(0, at + marker.length), ...name.split('/'), 'package.json');
-    if (!existsSync(pkgJson)) return null;
-    const pkg = JSON.parse(readFileSync(pkgJson, 'utf8'));
-    return { name: pkg.name, version: pkg.version, license: pkg.license ?? '(none)' };
-}
 
 const ids = new Set();
 await build({
