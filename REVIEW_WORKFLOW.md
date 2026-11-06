@@ -25,6 +25,10 @@ the findings and fixes the confirmed ones, with a failing test first.
 4. **Regenerate `HANDOFF_GROK_BUILD.md`** from the fixed commit, and give it to Grok Build.
 5. **Pass 2, both apps (Antigravity):** give it `ANTIGRAVITY_REVIEW_PROMPT.md` and the pass 1
    reports, after strudel.grok.me has been updated.
+   Done for `main` at `97b99f0` (web Antigravity, from the GitHub repository). Its bug findings
+   checked out in the code; its table of earlier fixes and its list of things that were fine did
+   not (it cited files that do not exist), so treat such lists as unchecked. Three small upstream
+   findings were fixed in the follow-up PR; the downstream ones went to Grok Build.
 
 Pass 1b goes before the handoff for the same reason as pass 1a: the downstream copies upstream
 modules almost verbatim, so a defect is cheapest to fix before it has been ported.
