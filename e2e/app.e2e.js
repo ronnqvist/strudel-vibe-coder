@@ -247,6 +247,7 @@ test('"Open in Strudel" is a visible link that opens the current pattern on stru
     const [popup] = await Promise.all([context.waitForEvent('page'), enter.click()]);
     await popup.waitForLoadState();
     expect(popup.url()).toBe(href);
+    await expect(popup).toHaveTitle('strudel stub'); // the mock, never the real strudel.cc (review pass 2, U3)
     await popup.close();
     await expect(frame).toHaveCount(1);
 
@@ -880,3 +881,47 @@ for (const width of [320, 375, 390]) {
         expect(sizes.minLeft).toBeGreaterThanOrEqual(sizes.left - 0.5);
     });
 }
+
+test.describe('review pass 2', () => {
+    test('U3: test data is seeded only into the app, not into the strudel.cc frame', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+        await page.goto('./');
+        await expect(page.locator('iframe')).toHaveCount(1);
+        const player = page.frames().find(f => f.url().startsWith('https://strudel.cc/'));
+        await expect.poll(async () => player.evaluate(() => document.title)).toBe('strudel stub');
+        expect(await player.evaluate(() => localStorage.length)).toBe(0);
+    });
+
+    test('U1: a chat whose only code is in an unfinished reply offers no "Use latest reply"', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([{ id: 'a', name: 'A', createdAt: '2026-01-01T00:00:00.000Z', messages: [
+                { id: 'u1', role: 'user', content: 'beat' },
+                { id: 'm1', role: 'assistant', content: '```js\ns("bd")\n```', status: 'interrupted', model: 'M' },
+            ] }]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: '',
+        });
+        await page.goto('./');
+        await expect(page.getByText('Interrupted', { exact: false }).first()).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Use latest reply' })).toHaveCount(0);
+    });
+
+    test('U2: importing a file clears the "new pattern" mark of the chat that was open', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test' });
+        await page.goto('./');
+        await page.getByLabel('Message', { exact: true }).fill('beat');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('button', { name: 'Use this version in the player' })).toBeVisible();
+
+        const file = { format: 'strudel-vibe-coder-chats', version: 3, chats: [{ id: 'x', name: 'Imported', messages: [], createdAt: '2026-01-01T00:00:00Z' }] };
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        await page.locator('input[type=file][accept=".json,application/json"]').setInputFiles({ name: 'one.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        const panel = page.getByRole('dialog', { name: 'Chats' });
+        await expect(panel.getByRole('button', { name: /^Imported/ })).toBeVisible();
+        await expect(panel.getByText('New pattern')).toHaveCount(0);
+    });
+});

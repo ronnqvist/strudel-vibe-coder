@@ -38,16 +38,19 @@ const MODELS_FIXTURE = {
  */
 export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', model = 'vendor/resolved-1', finishReason = 'stop' } = {}) {
     const chatRequests = [];
-    // Routes registered later win, so the catch-all goes first.
-    await page.route('**/*', (route) => {
+    // On the context, so popups (such as "Open in Strudel") are mocked too, never the real hosts.
+    // Routes registered later win, so the catch-all goes first. A test's own page.route() calls
+    // still take precedence over these.
+    const context = page.context();
+    await context.route('**/*', (route) => {
         const { hostname } = new URL(route.request().url());
         return hostname === 'localhost' ? route.continue() : route.abort('blockedbyclient');
     });
-    await page.route('https://strudel.cc/**', (route) =>
+    await context.route('https://strudel.cc/**', (route) =>
         route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>strudel stub</title><p>stub</p>' }));
-    await page.route('https://openrouter.ai/api/v1/models', (route) =>
+    await context.route('https://openrouter.ai/api/v1/models', (route) =>
         route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(MODELS_FIXTURE) }));
-    await page.route('https://openrouter.ai/api/v1/chat/completions', (route) => {
+    await context.route('https://openrouter.ai/api/v1/chat/completions', (route) => {
         const request = route.request();
         chatRequests.push({ body: JSON.parse(request.postData() ?? '{}'), headers: request.headers() });
         return route.fulfill({ contentType: 'text/event-stream', headers: { 'access-control-allow-origin': '*' }, body: sseBody(reply, model, finishReason) });
@@ -61,6 +64,7 @@ export async function mockNetwork(page, { reply = '```js\ns("bd sd")\n```', mode
  */
 export async function seedStorage(page, entries) {
     await page.addInitScript(([data]) => {
+        if (window !== window.top) return; // the app only, never the strudel.cc frame
         if (localStorage.getItem('__seeded')) return;
         localStorage.setItem('__seeded', '1');
         for (const [key, value] of Object.entries(data)) localStorage.setItem(key, value);
