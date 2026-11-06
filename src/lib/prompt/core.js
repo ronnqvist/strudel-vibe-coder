@@ -10,7 +10,7 @@ Strudel is a JavaScript implementation of TidalCycles for live coding music in t
 ## ❌ Do Not Use
 - ❌ NO standard JavaScript loops: for, while, forEach
 - ❌ NO Math.random() - use Strudel's randomness functions instead
-- ❌ NO imperative state management or variables for pattern generation
+- ❌ NO imperative state or step-by-step timing logic; build patterns with pattern functions. A \`let\` or \`const\` holding a pattern or a mini-notation string to reuse is fine
 - ❌ NO setInterval, setTimeout, or other timing functions
 - ❌ NO nested function calls like s("piano", note("c e g"))
 - ❌ NO invented functions: prefer the functions described here. Other functions documented in the Strudel reference are fine, but never guess a function name, and never use browser or Node APIs (DOM, fetch, timers).
@@ -46,7 +46,7 @@ Mini-notation is Strudel's pattern language, used inside strings with s(), note(
 - silence - a pattern that plays nothing (a constant: write silence, not silence())
 - run(n) - ascending sequence 0 to n-1
 - Waveforms for synths: sawtooth, square, triangle, sine, supersaw, pulse; noise: white, pink, brown, crackle. Usage: note("c e g").s("sawtooth")
-- Chain methods in this order: create (s, note, n) → sound (.s, .bank) → effects (.lpf, .room, .delay) → time (.fast, .slow, .every). Example: note("c e g").s("sawtooth").lpf(800).fast(2)
+- For readability, chain methods as: create (s, note, n) → sound (.s, .bank) → effects (.lpf, .room, .delay) → time (.fast, .slow, .every). This is a convention: effects are applied in Strudel's own fixed order whatever the chain order. Example: note("c e g").s("sawtooth").lpf(800).fast(2)
 
 ## Signals and Randomness
 - sine, saw, tri, square, perlin, rand - continuous signals between 0 and 1; .range(low, high) rescales them, for example .lpf(sine.range(400, 4000).slow(4))
@@ -64,12 +64,12 @@ Mini-notation is Strudel's pattern language, used inside strings with s(), note(
 # Mixing Basics
 - .gain(level) - volume (0-1, can go higher); .velocity(level) - velocity from 0 to 1, multiplied with gain
 - .pan(position) - 0=left, 0.5=center, 1=right; .jux(fn) - apply function to right channel only; .juxBy(amount, fn) - partial stereo separation
-- .lpf(freq) - lowpass filter (20-20000 Hz); .hpf(freq) - highpass; .bpf(freq) - bandpass
+- .lpf(freq) - lowpass filter cutoff in Hz (audible up to 20000); .hpf(freq) - highpass; .bpf(freq) - bandpass
 - .lpq(resonance) - lowpass resonance (0-50); .hpq(resonance) - highpass resonance (0-50); .bpq(resonance) - bandpass resonance
 - .compressor("threshold:ratio:knee:attack:release") - dynamics compressor, for example .compressor("-20:20:10:.002:.02"). (.compress(start, end) is NOT dynamics compression: it squeezes the events into part of each cycle)
 
 ## Delay and Reverb (Shared per Orbit)
-Patterns on the same orbit (the default is 1) share one delay and one reverb, so the last setting wins. Give patterns that need different delay or reverb settings their own orbit: .orbit(2).
+Patterns on the same orbit (the default is 1) share one delay and one reverb, so their settings overwrite each other unpredictably. Give patterns that need different delay or reverb settings their own orbit: .orbit(2).
 - .delay(level) - how loud the echoes are (0-1)
 - .delaytime(seconds) - time between echoes in seconds, for example .delaytime(0.25)
 - .delayfeedback(amount) - how much each echo feeds the next (0-1; 1 or more keeps getting louder)

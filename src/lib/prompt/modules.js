@@ -24,7 +24,7 @@ export const SYNTHESIS = `# Synthesis
 - .phaser(speed) - phaser effect; .phaserdepth(amount) - phaser depth`;
 
 export const SAMPLES = `# Samples and Drum Machines
-## Default Sounds (Always Available)
+## Default Sounds (Loaded by Default)
 Drums: bd (kick), sd (snare), hh (closed hi-hat), oh (open hi-hat), cp (clap), rim (rimshot), ht / mt / lt (high / mid / low tom), cr (crash), rd (ride), cb (cowbell), sh (shaker), tb (tambourine), brk (break), misc
 Other samples: clap, jazz, casio, piano, plus world and orchestral percussion such as agogo, bongo, conga, cajon, marimba, kalimba, harp
 General MIDI instruments are named gm_<instrument>, for example gm_acoustic_bass, gm_electric_bass_finger, gm_piano, gm_epiano1, gm_violin, gm_string_ensemble_1, gm_synth_strings_1, gm_pad_warm, gm_lead_2_sawtooth, gm_flute, gm_marimba, gm_vibraphone, gm_church_organ, gm_trumpet
@@ -54,12 +54,12 @@ export const HARMONY = `# Scales and Chords
 - Chords by hand: note("<[c3,e3,g3] [a2,c3,e3] [f3,a3,c4]>").s("piano")
 - .off(1/8, x => x.add(note(7))) - layer a copy, shifted later by 1/8 cycle, on top; here 7 semitones (a fifth) higher: note("c3 eb3 g3").off(1/8, x => x.add(note(7)))
 - With scale degrees, shift by degrees with .scaleTranspose() after .scale(): n("0 2 4").scale("C:minor").off(1/8, x => x.scaleTranspose(4))
-- Prefer scale degrees with .scale() for melodies, so every note stays in key when you change the scale`;
+- Prefer plain scale degrees with .scale() for melodies, so the notes follow the scale when you change it (a degree with a sharp or flat, such as "2#", leaves the scale on purpose)`;
 
 export const ARRANGEMENT = `# Arrangement
 - arrange([4, a], [2, b]) - play pattern a for 4 cycles, then b for 2 cycles, and repeat: arrange([4, "<c a f e>(3,8)"], [2, "<g a>(5,8)"]).note()
 - cat(a, b) - one pattern per cycle; "<a b>" in mini-notation alternates per cycle; "<a b>/2" changes every 2 cycles
-- .mask("<1 1 0 1>") - silence a layer in some cycles (0 or ~ mutes), for example a hi-hat that drops out every fourth cycle
+- .mask("<1 1 1 0>") - silence a layer in some cycles (0 or ~ mutes), for example a hi-hat that drops out every fourth cycle
 - .every(n, fn), .firstOf(n, fn), .lastOf(n, fn) - change something once every n cycles, for a fill or a variation
 - Build a track as named layers, then combine them:
   stack(
