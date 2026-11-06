@@ -13,7 +13,9 @@ describe('Content-Security-Policy', () => {
     it('never allows inline or eval code, and has no wildcard source', () => {
         expect(csp).not.toMatch(/unsafe-inline|unsafe-eval|unsafe-hashes/);
         expect(csp).not.toMatch(/(^|[ ;])\*($|[ ;])/);
-        expect(csp).not.toMatch(/https?:(?=[ ;]|$)/); // a bare scheme source such as "https:"
+        // a bare scheme source such as "https:" only where custom endpoints need it (connect-src)
+        const { 'connect-src': _connect, ...others } = CSP_DIRECTIVES;
+        expect(buildCsp(others)).not.toMatch(/https?:(?=[ ;]|$)/);
     });
 
     it('allows scripts and styles from the app itself only', () => {
@@ -21,8 +23,9 @@ describe('Content-Security-Policy', () => {
         expect(CSP_DIRECTIVES['style-src']).toEqual(["'self'"]);
     });
 
-    it('allows network access to OpenRouter only, and framing of strudel.cc only', () => {
-        expect(CSP_DIRECTIVES['connect-src']).toEqual(['https://openrouter.ai']);
+    it('allows requests to any https endpoint and to a server on this computer, and framing of strudel.cc only', () => {
+        // custom OpenAI-compatible endpoints can be any https host, or http://localhost (Ollama, LM Studio)
+        expect(CSP_DIRECTIVES['connect-src']).toEqual(['https:', 'http://localhost:*', 'http://127.0.0.1:*']);
         expect(CSP_DIRECTIVES['frame-src']).toEqual(['https://strudel.cc']);
     });
 
