@@ -38,6 +38,8 @@ function App() {
     const [notices, setNotices] = useState({}); // chatId -> why the last pattern was not loaded
     const [news, setNews] = useState(() => new Set()); // chats whose stage changed since it was last seen
     const [showSettings, setShowSettings] = useState(false);
+    // What is missing before a request can be sent, shown in Settings when it opened for that
+    const [settingsNotice, setSettingsNotice] = useState('');
     const [showChats, setShowChats] = useState(false);
     const [pasteDialog, setPasteDialog] = useState(null); // 'code' | 'error' | null
     const [editingMessage, setEditingMessage] = useState({ index: null, id: null, content: '' });
@@ -178,10 +180,12 @@ function App() {
                 customInstructions: settings.customInstructions,
             });
 
-            const result = await generateStrudelCode(settings.effectiveApiKey, settings.model, apiMessages, settings.modelName, {
+            const { connection } = settings;
+            const result = await generateStrudelCode(settings.effectiveApiKey, connection.model, apiMessages, connection.modelName, {
                 signal: req.signal,
                 onText: req.onText,
                 systemPrompt,
+                endpoint: connection.endpoint,
             });
 
             // The chat was deleted while the reply was arriving: nothing to add or announce
@@ -193,7 +197,7 @@ function App() {
                 return;
             }
 
-            const message = replyMessage(result, settings.modelName, { promptVersion: PROMPT_VERSION });
+            const message = replyMessage(result, connection.modelName, { promptVersion: PROMPT_VERSION });
             chat.updateChatWith(chatId, (c) => {
                 const next = appendMessage(c, message);
                 return firstMessageText ? nameAfterFirstMessage(next, firstMessageText) : next;
@@ -224,10 +228,10 @@ function App() {
         if (await sendText(text)) setInput('');
     };
 
-    /** Ask for a key when there is none. Returns whether there is one. */
+    /** Open Settings and say what is missing (a key, or a model) when a request cannot be sent yet. */
     const haveKey = () => {
-        if (settings.effectiveApiKey) return true;
-        alert("Please enter your OpenRouter API Key in settings.");
+        if (settings.connection.ready) return true;
+        setSettingsNotice(settings.connection.missing);
         setShowSettings(true);
         return false;
     };
@@ -276,7 +280,7 @@ function App() {
     const fixError = async (text) => {
         if (isLoading || requests.isRunning(currentChatId)) return 'A reply is still being written in this chat. Try again when it has finished.';
         // Keep the dialog (and the pasted error) open until the request can really be sent
-        if (!settings.effectiveApiKey) return 'Add your OpenRouter API key in Settings first. Your error text stays here.';
+        if (!settings.connection.ready) return `${settings.connection.missing} Your error text stays here.`;
         const sent = await sendText(`The pattern in the player fails with this error:\n\n\`\`\`\n${text.trim()}\n\`\`\`\n\nPlease fix the pattern and change nothing else.`);
         return sent ? null : 'The error could not be sent. Try again.';
     };
@@ -297,7 +301,7 @@ function App() {
                 showChats={showChats}
                 showSettings={showSettings}
                 onToggleChats={() => setShowChats(!showChats)}
-                onToggleSettings={() => setShowSettings(!showSettings)}
+                onToggleSettings={() => { setShowSettings(!showSettings); setSettingsNotice(''); }}
             />
 
             <div role="status" aria-live="polite" className="sr-only">{announcement}</div>
@@ -350,7 +354,16 @@ function App() {
                         promptPrefs={settings.promptPrefs}
                         onPromptPrefsChange={settings.setPromptPrefs}
                         musicExtras={<CustomInstructions value={settings.customInstructions} onChange={settings.setCustomInstructions} />}
-                        onClose={() => setShowSettings(false)}
+                        onClose={() => { setShowSettings(false); setSettingsNotice(''); }}
+                        notice={settingsNotice}
+                        endpoints={settings.endpoints}
+                        activeEndpointId={settings.activeEndpointId}
+                        onActiveEndpointChange={(id) => { settings.setActiveEndpoint(id); setSettingsNotice(''); }}
+                        onAddEndpoint={settings.addEndpoint}
+                        onUpdateEndpoint={settings.updateEndpoint}
+                        onRemoveEndpoint={settings.removeEndpoint}
+                        endpointKeys={settings.endpointKeys}
+                        onEndpointKeyChange={settings.setEndpointKey}
                     />
                 )}
 
@@ -361,7 +374,7 @@ function App() {
                         messages={chat.messages}
                         isLoading={isLoading}
                         streamingText={requests.textFor(currentChatId)}
-                        streamingModel={settings.modelName}
+                        streamingModel={settings.connection.modelName}
                         onPickPrompt={pickPrompt}
                         editing={editingMessage}
                         onEditContentChange={(content) => setEditingMessage({ ...editingMessage, content })}
