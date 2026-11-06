@@ -23,17 +23,26 @@ export function useChats() {
         reportSave(ok);
     }, [chats]);
 
-    useEffect(() => {
-        try { localStorage.setItem(CURRENT_CHAT_KEY, currentChatId); } catch { /* storage unavailable */ }
-    }, [currentChatId]);
-
     const currentChat = chats.find(c => c.id === currentChatId);
     const currentStageCode = stageCode(currentChat);
 
-    // Keep the key earlier versions read the player's pattern from in step with the active chat
+    // Save the current chat id, and keep the key earlier versions read the player's pattern from
+    // (the mirror) in step with that chat. At startup a mirror that differs from the current chat's
+    // pattern is adopted as an edit made by an older version, so the mirror must never be left
+    // stale: if either write fails, the mirror is removed (removing works even when storage is
+    // full) and is not written again until both writes work. Otherwise a reload would bring back an
+    // older pattern, or put another chat's pattern into the chat that opens.
     useEffect(() => {
-        try { localStorage.setItem(LEGACY_CODE_KEY, currentStageCode); } catch { /* storage unavailable */ }
-    }, [currentStageCode]);
+        let ok = true;
+        try {
+            localStorage.setItem(CURRENT_CHAT_KEY, currentChatId);
+            localStorage.setItem(LEGACY_CODE_KEY, currentStageCode);
+        } catch {
+            ok = false;
+            try { localStorage.removeItem(LEGACY_CODE_KEY); } catch { /* storage unavailable */ }
+        }
+        reportSave(ok, 'current chat');
+    }, [currentChatId, currentStageCode]);
 
     const updateChat = (id, patch) => {
         setChats(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));

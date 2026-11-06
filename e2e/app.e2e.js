@@ -753,4 +753,73 @@ test.describe('review pass 1b', () => {
         expect(page.consoleErrors.filter(e => !/Failed to load resource: net::ERR_FAILED/.test(e))).toEqual([]);
         page.consoleErrors.length = 0;
     });
+
+    const chatWith = (id, name, code) => ({
+        id, name, messages: [], createdAt: '2026-01-01T00:00:00.000Z',
+        revisions: [{ id: `r${id}`, code, origin: 'edited', createdAt: '2026-01-01T00:00:00.000Z' }], selectedRevisionId: `r${id}`,
+    });
+    const stage = async (page) => decodeStrudelSrc(await page.locator('iframe').getAttribute('src'));
+    // Make one localStorage key fail to save from now on (only in this page load)
+    const failSaving = (page, failingKey) => page.evaluate((k) => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === k) throw new DOMException('full', 'QuotaExceededError');
+            return original.call(this, key, value);
+        };
+    }, failingKey);
+
+    test('G2: a failed save of the player mirror does not bring back an older pattern after reload', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([chatWith('a', 'A', 's("hh")')]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: 's("hh")',
+        });
+        await page.goto('./');
+        await failSaving(page, 'openrouter_current_code');
+
+        await page.getByRole('button', { name: 'Use edited code' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Use edited code' });
+        await dialog.getByLabel('Code from the player').fill('s("sd")');
+        await dialog.getByRole('button', { name: 'Use this code' }).click();
+        await expect.poll(() => stage(page)).toBe('s("sd")');
+        await expect(page.getByRole('alert').filter({ hasText: 'could not be saved' })).toBeVisible();
+
+        await page.reload();
+        await expect.poll(() => stage(page)).toBe('s("sd")');
+    });
+
+    test('G2: a failed save of the current chat never puts another chat\'s pattern into it', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([chatWith('a', 'A', 's("aa")'), chatWith('b', 'B', 's("bb")')]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: 's("aa")',
+        });
+        await page.goto('./');
+        await failSaving(page, 'openrouter_current_chat_id');
+
+        await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        await page.getByRole('button', { name: /^B/ }).click();
+        await expect.poll(() => stage(page)).toBe('s("bb")');
+
+        await page.reload(); // chat A opens again, since its id is what was saved
+        await expect.poll(() => stage(page)).toBe('s("aa")');
+        const chats = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
+        expect(chats.find(c => c.id === 'a').revisions.map(r => r.code)).toEqual(['s("aa")']);
+    });
+
+    test('G2: a pattern an older version wrote is still adopted', async ({ page }) => {
+        await mockNetwork(page);
+        await seedStorage(page, {
+            openrouter_chats: JSON.stringify([chatWith('a', 'A', 's("aa")')]),
+            openrouter_current_chat_id: 'a',
+            openrouter_current_code: 's("older")',
+        });
+        await page.goto('./');
+        await expect.poll(() => stage(page)).toBe('s("older")');
+        await page.reload(); // idempotent
+        const chats = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
+        expect(chats[0].revisions.map(r => r.code)).toEqual(['s("aa")', 's("older")']);
+    });
 });

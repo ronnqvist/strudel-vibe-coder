@@ -21,4 +21,12 @@ describe('saveStatus', () => {
         unsubscribe();
         reportSave(true);
     });
+
+    it('keeps failing while any saved value fails, so a working chats save does not hide a failed mirror (review G2)', () => {
+        reportSave(false, 'current chat');
+        reportSave(true); // the chats were saved
+        expect(saveFailureEpisode()).toBeGreaterThan(0);
+        reportSave(true, 'current chat');
+        expect(saveFailureEpisode()).toBe(0);
+    });
 });
