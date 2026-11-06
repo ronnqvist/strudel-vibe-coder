@@ -36,7 +36,10 @@ Tests use mocked providers only. Never make paid model calls, never commit keys 
 
 ## Layout
 
-- `src/lib/openrouter.js`: request and streaming. Returns `{ status, ... }` with status
+- `src/lib/endpoints.js`: custom OpenAI-compatible endpoints (URL rules: https, or http on
+  localhost only). `useSettings` turns the chosen provider into one `connection`
+  (`{ endpoint, model, ready, missing }`) that App uses for every request.
+- `src/lib/openrouter.js`: request and streaming (OpenRouter, or a custom `endpoint`). Returns `{ status, ... }` with status
   `completed | interrupted | truncated | aborted | refused | error`; never throws after the request.
 - `src/lib/generation.js`: what each status means (only `completed` auto-loads), the stored reply
   message, the API conversation (failed replies left out), the current-pattern context.
@@ -74,6 +77,9 @@ Tests use mocked providers only. Never make paid model calls, never commit keys 
 | `openrouter_model`, `openrouter_saved_models` | selected model and bookmarks |
 | `openrouter_prompt_prefs` | `{ visuals, explanation }`: `auto`, `always` or `never`; `none`, `brief` or `teaching` |
 | `openrouter_custom_instructions` | the user's own music instructions (max 2,000 characters) |
+| `openrouter_endpoints` | JSON array of custom OpenAI-compatible endpoints `{ id, name, baseUrl, model }` (no keys) |
+| `openrouter_active_endpoint` | `openrouter` (default) or the id of the endpoint in use |
+| `openrouter_endpoint_keys` | JSON `{ [endpointId]: key }`, only while "remember" is on |
 
 Migration rules:
 
