@@ -7,7 +7,7 @@ Describe music in plain language and get live-coded [Strudel](https://strudel.cc
 
 ## How it works
 
-1. You bring your own [OpenRouter](https://openrouter.ai/) API key and pick a model. Everything runs in your browser; there is no server of ours.
+1. You bring your own [OpenRouter](https://openrouter.ai/) API key and pick a model, or use any OpenAI-compatible endpoint (see below). Everything runs in your browser; there is no server of ours.
 2. You describe a sound ("acid techno bass"). The reply is streamed into the chat, and you can stop it at any time (button or Esc).
 3. When the reply is complete and its code is valid JavaScript, the code is loaded into the player, which is strudel.cc shown in an iframe. Press play there. A reply that was cut off, interrupted, refused or failed is marked in the chat and does not replace the pattern that is playing.
 4. Each chat has its own pattern. Switching chats shows that chat's pattern (and stops the music that was playing), and a reply that finishes in another chat stays in that chat. **Use this version** puts an earlier reply back in the player, and **Restore previous** undoes the last change.
@@ -19,11 +19,21 @@ The system prompt is put together for each request from a short output contract,
 
 The code reaches the player exactly as it is shown in the chat. Only when a reply's code does not parse because the model used typographic quotes or dashes as JavaScript punctuation, the app straightens them, checks that the result parses, and says so.
 
+### Other providers: custom endpoints
+
+Settings > **Provider** can also send requests to any OpenAI-compatible API instead of OpenRouter: for example OpenAI, Groq, Mistral, DeepSeek, Together or xAI's own API, or a server on your computer such as Ollama or LM Studio. **Add custom endpoint**, then enter:
+
+- **Base URL:** the part before `/chat/completions`, for example `https://api.groq.com/openai/v1`, `http://localhost:11434/v1` (Ollama) or `http://localhost:1234/v1` (LM Studio). It must be `https://`, or plain `http://` on this computer only (`localhost`, `127.0.0.1`).
+- **Endpoint API key:** optional (a local server usually needs none). It is kept like the OpenRouter key, under the same **Remember** setting, and sent only to that endpoint.
+- **Model id:** typed, or picked after **Load models** (`GET /models`).
+
+The endpoint must allow requests from this site's address (CORS). Most hosted APIs do. For Ollama, start it with `OLLAMA_ORIGINS=https://ronnqvist.github.io`. In LM Studio, turn on **Enable CORS** in the server settings. Browsers may also ask whether the site may reach your local network.
+
 The default model is `~x-ai/grok-latest`. The suggested models (`~anthropic/claude-opus-latest`, `~openai/gpt-sol-latest`, `~deepseek/deepseek-flash-latest`) are OpenRouter aliases that always point at the newest version of a family. Settings has a searchable list of every OpenRouter model, and you can type any model id.
 
 ## Your key and your data
 
-- Your API key and chats stay in your browser's localStorage and go nowhere else. The key is sent only to `openrouter.ai`; chat text goes to OpenRouter and the model provider you chose.
+- Your API key and chats stay in your browser's localStorage and go nowhere else. The OpenRouter key is sent only to `openrouter.ai`, and a custom endpoint's key only to that endpoint. Chat text goes to the provider you chose (and, through OpenRouter, to the model's provider).
 - **Remember key on this device** (settings, on by default) can be turned off: the key then lives in memory for that tab only. **Forget key** removes it everywhere.
 - **Temporary key in the address:** open `https://ronnqvist.github.io/strudel-vibe-coder/#sk-or-v1-YOUR-KEY`. The key is used for that visit only, is never stored, and is removed from the address bar immediately. Treat such a link like a password: anyone who has it can spend your credits, and it stays in whatever you used to share it (chat history, bookmarks, the history of the browser you first opened it in). Use a key with a spending limit.
 - The player is `strudel.cc`. The code is in the URL fragment, which browsers do not send to servers, but strudel.cc's own page then runs it and loads sounds and Hydra from its own hosts.
@@ -47,7 +57,7 @@ The end-to-end tests need a browser: run `npx playwright install chromium` once 
 
 Layout: `src/components` (UI), `src/hooks` (state), `src/lib` (OpenRouter client, streaming, URL encoding for strudel.cc, chat files), `src/lib/prompt` (the system prompt and its modules), `src/config.js` (default models, URLs, starter prompts), `scripts/` (Content-Security-Policy and licence check), `e2e/` (Playwright).
 
-The production build includes a strict Content-Security-Policy (`scripts/csp.js`). It allows only the app itself, `openrouter.ai` for requests and `strudel.cc` for the player. A `<meta>` policy cannot stop other sites from embedding the app (`frame-ancestors`); that needs HTTP headers, which GitHub Pages does not offer.
+The production build includes a Content-Security-Policy (`scripts/csp.js`). Scripts and styles come only from the app itself (no inline script, no `eval`), and only `strudel.cc` can be framed. Requests may go to any `https://` host and to `http://localhost` and `http://127.0.0.1`, because custom endpoints can be anywhere and a `<meta>` policy is fixed when the site is built. So the policy no longer limits where a script could send data, a defence that would only matter after an XSS bug. A `<meta>` policy cannot stop other sites from embedding the app (`frame-ancestors`); that needs HTTP headers, which GitHub Pages does not offer.
 
 ### Deployment
 

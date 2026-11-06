@@ -2,6 +2,8 @@
 
 export const API_KEY_STORAGE_KEY = 'openrouter_api_key';
 export const REMEMBER_KEY_STORAGE_KEY = 'openrouter_remember_key';
+/** Keys of custom endpoints, `{ [endpointId]: key }`, kept under the same "remember" setting. */
+export const ENDPOINT_KEYS_STORAGE_KEY = 'openrouter_endpoint_keys';
 
 /**
  * Whether the API key may be kept in localStorage. On unless the user turned it off, which
@@ -46,5 +48,30 @@ export function persistRemember(storage, remember) {
         storage.setItem(REMEMBER_KEY_STORAGE_KEY, String(remember));
     } catch {
         // storage unavailable
+    }
+}
+
+const onlyStringKeys = (keys) => Object.fromEntries(
+    Object.entries(keys && typeof keys === 'object' && !Array.isArray(keys) ? keys : {})
+        .filter(([id, key]) => typeof key === 'string' && key && id),
+);
+
+/** The custom endpoints' keys to start with: the stored ones if remembering is on, otherwise none. */
+export function loadEndpointKeys(storage) {
+    if (!readRemember(storage)) return {};
+    try {
+        return onlyStringKeys(JSON.parse(storage.getItem(ENDPOINT_KEYS_STORAGE_KEY) || '{}'));
+    } catch {
+        return {};
+    }
+}
+
+/** Like persistApiKey, for the custom endpoints' keys. */
+export function persistEndpointKeys(storage, keys, remember) {
+    try {
+        if (remember) storage.setItem(ENDPOINT_KEYS_STORAGE_KEY, JSON.stringify(onlyStringKeys(keys)));
+        else storage.removeItem(ENDPOINT_KEYS_STORAGE_KEY);
+    } catch {
+        // storage unavailable: the keys stay in memory for this session
     }
 }

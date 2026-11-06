@@ -2,8 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import {
     API_KEY_STORAGE_KEY,
+    ENDPOINT_KEYS_STORAGE_KEY,
     REMEMBER_KEY_STORAGE_KEY,
     loadApiKey,
+    loadEndpointKeys,
+    persistEndpointKeys,
     persistApiKey,
     persistRemember,
     readRemember,
@@ -77,5 +80,21 @@ describe('persistRemember', () => {
         expect(s.data[REMEMBER_KEY_STORAGE_KEY]).toBe('false');
         persistRemember(s, true);
         expect(s.data[REMEMBER_KEY_STORAGE_KEY]).toBe('true');
+    });
+});
+
+describe('endpoint keys', () => {
+    it('are kept per endpoint while remembering is on, and removed when it is off', () => {
+        const storage = memoryStorage();
+        persistEndpointKeys(storage, { e1: 'k1', e2: '', e3: 42 }, true);
+        expect(JSON.parse(storage.data[ENDPOINT_KEYS_STORAGE_KEY])).toEqual({ e1: 'k1' });
+        expect(loadEndpointKeys(storage)).toEqual({ e1: 'k1' });
+        persistEndpointKeys(storage, { e1: 'k1' }, false);
+        expect(ENDPOINT_KEYS_STORAGE_KEY in storage.data).toBe(false);
+    });
+    it('start empty when remembering is off or the stored value is broken', () => {
+        expect(loadEndpointKeys(memoryStorage({ [ENDPOINT_KEYS_STORAGE_KEY]: '{"e1":"k"}', [REMEMBER_KEY_STORAGE_KEY]: 'false' }))).toEqual({});
+        expect(loadEndpointKeys(memoryStorage({ [ENDPOINT_KEYS_STORAGE_KEY]: 'not json' }))).toEqual({});
+        expect(loadEndpointKeys(memoryStorage({ [ENDPOINT_KEYS_STORAGE_KEY]: '["k"]' }))).toEqual({});
     });
 });

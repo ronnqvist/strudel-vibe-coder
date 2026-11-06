@@ -4,7 +4,12 @@
  *
  * - its own script and stylesheet (no inline script, no inline style, no eval)
  * - icons are inline SVG elements and there are no web fonts or images from elsewhere
- * - connect-src: the OpenRouter API, called straight from the browser
+ * - connect-src: the model APIs, called straight from the browser: OpenRouter, and any custom
+ *   OpenAI-compatible endpoint the user adds, which can be any https host or a server on this
+ *   computer (http://localhost, http://127.0.0.1). A <meta> policy is fixed at build time, so it
+ *   cannot list hosts the user types in later; `https:` is the price of that. It means the policy
+ *   no longer limits where a script could send data, a defence that would only matter after an
+ *   XSS bug. Scripts are still only the app's own (no inline script, no eval).
  * - frame-src: the Strudel player, https://strudel.cc, shown in an iframe
  *
  * What runs inside the strudel.cc iframe (its scripts, samples from strudel.b-cdn.net, Hydra from
@@ -21,7 +26,7 @@ export const CSP_DIRECTIVES = {
     'style-src': ["'self'"],
     'img-src': ["'self'"],
     'font-src': ["'self'"],
-    'connect-src': ['https://openrouter.ai'],
+    'connect-src': ['https:', 'http://localhost:*', 'http://127.0.0.1:*'],
     'frame-src': ['https://strudel.cc'],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],

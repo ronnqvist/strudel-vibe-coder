@@ -161,7 +161,7 @@ const ModelPicker = ({ model, onModelChange, bookmarks, onBookmarksChange, catal
                                 <select
                                     value={provider}
                                     onChange={(e) => setProvider(e.target.value)}
-                                    aria-label="Provider"
+                                    aria-label="Filter by model maker"
                                     className="bg-cyber-dark border border-cyber-gray rounded p-1 text-xs text-white"
                                 >
                                     <option value="">All providers</option>
