@@ -43,7 +43,7 @@ export function notLoadedNotice(status) {
 /**
  * The screen-reader announcement once a request has ended.
  * @param {{ status: GenerationStatus, code?: string | null, error?: { message: string } | null }} result
- * @param {'loaded' | 'invalid' | 'not-loaded' | 'none'} [load] what happened to the code
+ * @param {'loaded' | 'invalid' | 'unchecked' | 'not-loaded' | 'none'} [load] what happened to the code
  */
 export function announcement(result, load = 'none') {
     switch (result.status) {
@@ -56,6 +56,7 @@ export function announcement(result, load = 'none') {
             if (!result.code) return 'Reply received';
             if (load === 'loaded') return 'Reply received. The pattern was loaded into the player.';
             if (load === 'invalid') return 'Reply received. The pattern has a syntax error and was not loaded.';
+            if (load === 'unchecked') return 'Reply received. The pattern could not be checked and was not loaded. Reload the page.';
             return 'Reply received';
     }
 }

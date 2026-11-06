@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { patternSyntaxError, preparePattern } from './patternCheck';
 
 describe('patternSyntaxError', () => {
@@ -27,9 +27,19 @@ describe('patternSyntaxError', () => {
         expect(await patternSyntaxError(undefined)).toBeNull();
     });
 
-    it('fails open when the parser breaks in a way that is not a syntax error', async () => {
+    it('fails closed when the parser breaks in a way that is not a syntax error (review G1)', async () => {
         const broken = () => { throw new TypeError('parser bug'); };
-        expect(await patternSyntaxError('s("bd")', { parse: broken })).toBeNull();
+        expect(await patternSyntaxError('s("bd")', { parse: broken })).toMatch(/could not be checked/);
+    });
+
+    it('fails closed when the parser cannot be loaded, and tries to load it again next time (review G1)', async () => {
+        const load = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch dynamically imported module'))
+            .mockResolvedValueOnce(() => {});
+        const first = await preparePattern('s("bd"', { load });
+        expect(first).toMatchObject({ ok: false, unavailable: true, code: 's("bd"' });
+        expect(first.error).toMatch(/Reload the page/);
+        expect(await preparePattern('s("bd")', { load })).toEqual({ ok: true, code: 's("bd")', repaired: false, error: null });
+        expect(load).toHaveBeenCalledTimes(2);
     });
 });
 

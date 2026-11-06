@@ -734,3 +734,23 @@ test.describe('review F11: dialogs and contrast', () => {
         expect(ratios.limits).toBeGreaterThanOrEqual(4.5);
     });
 });
+
+test.describe('review pass 1b', () => {
+    test('G1: when the code checker cannot load, an invalid reply does not replace the pattern', async ({ page }) => {
+        await mockNetwork(page, { reply: '```js\ns("bd"\n```' }); // missing ")"
+        await page.route('**/assets/acorn-*.js', route => route.abort('failed'));
+        await seedStorage(page, { openrouter_api_key: 'sk-or-v1-test', openrouter_current_code: 's("hh")' });
+        await page.goto('./');
+        await expect.poll(async () => decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("hh")');
+
+        await page.getByLabel('Message', { exact: true }).fill('make a beat');
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('alert').filter({ hasText: 'Not loaded into the player' })).toContainText('Reload the page');
+        await expect(page.getByRole('status')).toHaveText('Reply received. The pattern could not be checked and was not loaded. Reload the page.');
+        expect(decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("hh")');
+        // the browser reports the blocked file itself; nothing else may have failed
+        expect(page.consoleErrors.length).toBeGreaterThan(0);
+        expect(page.consoleErrors.filter(e => !/Failed to load resource: net::ERR_FAILED/.test(e))).toEqual([]);
+        page.consoleErrors.length = 0;
+    });
+});

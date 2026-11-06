@@ -105,7 +105,8 @@ function App() {
      * Put a pattern on a chat's stage unless it is not valid JavaScript, so a broken reply cannot
      * replace a pattern that works. The stage gets exactly the code that was validated (possibly
      * with curly quotes repaired, which the notice then says). Only `chatId`'s stage changes,
-     * whichever chat is being viewed. Returns whether it was loaded.
+     * whichever chat is being viewed. Returns 'loaded', 'invalid' (a syntax error) or
+     * 'unchecked' (the code checker could not run, so nothing was loaded).
      *
      * @param {string} chatId
      * @param {string} code
@@ -114,8 +115,10 @@ function App() {
     const loadIntoStage = async (chatId, code, meta) => {
         const prepared = await preparePattern(code);
         if (!prepared.ok) {
-            setNotice(chatId, `Not loaded into the player: the code has a syntax error (${prepared.error}). The previous pattern is still loaded.`);
-            return false;
+            setNotice(chatId, prepared.unavailable
+                ? `Not loaded into the player: ${prepared.error} The previous pattern is still loaded.`
+                : `Not loaded into the player: the code has a syntax error (${prepared.error}). The previous pattern is still loaded.`);
+            return prepared.unavailable ? 'unchecked' : 'invalid';
         }
         setNotice(chatId, prepared.repaired ? 'Loaded with typographic quotes and dashes in the code replaced by plain ones, so that it runs.' : '');
         chat.updateChatWith(chatId, (c) => {
@@ -123,7 +126,7 @@ function App() {
             return meta.messageId ? updateMessage(next, meta.messageId, { revisionId: revision.id }) : next;
         });
         markNews(chatId);
-        return true;
+        return 'loaded';
     };
 
     const stopEditing = () => setEditingMessage({ index: null, id: null, content: '' });
@@ -196,7 +199,7 @@ function App() {
             // Load the pattern only when the reply completed and the code parses
             let load = 'none';
             if (result.code && canAutoLoad(result.status)) {
-                load = (await loadIntoStage(chatId, result.code, { origin: 'reply', messageId: message.id, model: message.model })) ? 'loaded' : 'invalid';
+                load = await loadIntoStage(chatId, result.code, { origin: 'reply', messageId: message.id, model: message.model });
             } else {
                 // Say why nothing was loaded (also for a refusal without code), or clear an older notice
                 setNotice(chatId, notLoadedNotice(result.status));
@@ -247,15 +250,19 @@ function App() {
     const loadMessageVersion = async (msg) => {
         const code = codeFromMessage(msg);
         if (!code) return;
-        const loaded = await loadIntoStage(currentChatId, code, { origin: 'message', messageId: msg.id, model: msg.model });
-        setAnnouncement(loaded ? 'The pattern was loaded into the player.' : 'The pattern has a syntax error and was not loaded.');
+        const load = await loadIntoStage(currentChatId, code, { origin: 'message', messageId: msg.id, model: msg.model });
+        setAnnouncement({
+            loaded: 'The pattern was loaded into the player.',
+            invalid: 'The pattern has a syntax error and was not loaded.',
+            unchecked: 'The pattern could not be checked and was not loaded. Reload the page.',
+        }[load]);
     };
 
     /** "Use edited code": the user pasted code from the Strudel editor; it becomes this chat's pattern. */
     const applyEditedCode = async (text) => {
         const chatId = currentChatId;
         const prepared = await preparePattern(text.trim());
-        if (!prepared.ok) return `This code has a syntax error (${prepared.error}), so it was not loaded.`;
+        if (!prepared.ok) return prepared.unavailable ? prepared.error : `This code has a syntax error (${prepared.error}), so it was not loaded.`;
         chat.updateChatWith(chatId, (c) => addRevision(c, { code: prepared.code, origin: 'edited', repaired: prepared.repaired }).chat);
         setNotice(chatId, prepared.repaired ? 'Loaded with typographic quotes and dashes in the code replaced by plain ones, so that it runs.' : '');
         setAnnouncement('Your edited code is now the pattern in the player.');
