@@ -151,3 +151,20 @@ describe('review F7: reusing a revision for a new message', () => {
         expect(selectedRevision(c)).toMatchObject({ messageId: 'msg-2', origin: 'reply', model: 'M' });
     });
 });
+
+describe('review F7 and F8', () => {
+    it('detachMessage unlinks the revisions made from an edited message, and keeps the stage', async () => {
+        const { detachMessage } = await import('./revisions');
+        const c = addRevision(chat(), { code: 'x', origin: 'reply', messageId: 'm1' }, opts()).chat;
+        const d = detachMessage(c, 'm1');
+        expect(selectedRevision(d).messageId).toBeUndefined();
+        expect(stageCode(d)).toBe('x');
+        expect(detachMessage(d, 'm1')).toBe(d);
+    });
+    it('a starter put back on stage after the chat has messages counts as the pattern to change', async () => {
+        const { patternForRequest } = await import('./revisions');
+        const fresh = addRevision(chat(), { code: 's("bd")', origin: 'starter' }, opts()).chat;
+        expect(patternForRequest(fresh)).toBe('');
+        expect(patternForRequest({ ...fresh, messages: [{ id: '1', role: 'user', content: 'x' }] })).toBe('s("bd")');
+    });
+});

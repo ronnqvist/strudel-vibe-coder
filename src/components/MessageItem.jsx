@@ -13,6 +13,7 @@ const MessageItem = ({
     onSaveEdit,
     onLoadCode,
     onStage = false,
+    hasCode = true,
     onRetry,
     readOnly = false,
 }) => {
@@ -57,7 +58,7 @@ const MessageItem = ({
                                     >
                                         <Edit2 className="w-3 h-3" aria-hidden="true" />
                                     </button>
-                                    <button
+                                    {hasCode && <button
                                         onClick={onLoadCode}
                                         aria-label="Use this version in the player"
                                         className="flex items-center gap-1 bg-cyber-gray hover:bg-cyber-neon/20 text-cyber-cyan text-xs px-2 py-1 rounded transition-colors border border-cyber-cyan/30"
@@ -65,7 +66,7 @@ const MessageItem = ({
                                     >
                                         <Play className="w-3 h-3" aria-hidden="true" />
                                         Use this version
-                                    </button>
+                                    </button>}
                                 </div>}
                             </div>
                             <pre className="whitespace-pre-wrap break-words text-sm">{message.content}</pre>

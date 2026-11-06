@@ -132,11 +132,34 @@ export function adoptLegacyCode(chat, code, options) {
 }
 
 /**
- * The code to tell the model about as "the pattern in the player", or ''. The starter pattern is
- * not the user's (it is left out), and the app's attribution line is left out, so that a model
+ * The code to tell the model about as "the pattern in the player", or ''. The untouched starter
+ * pattern of a first visit is left out, and so is the app's attribution line, so that a model
  * revising another model's pattern does not copy the old attribution.
  */
 export function patternForRequest(chat) {
     const revision = selectedRevision(chat);
-    return revision && revision.origin !== 'starter' ? stripAttribution(revision.code) : '';
+    if (!revision) return '';
+    // The untouched starter of a first visit is not the user's pattern. Once the chat has messages,
+    // a starter on stage (for example after "Restore previous") was put there on purpose.
+    const untouchedStarter = revision.origin === 'starter' && !chat.messages?.some(m => m.role === 'user');
+    return untouchedStarter ? '' : stripAttribution(revision.code);
+}
+
+/**
+ * A message's code was edited: its revisions no longer show what it says, so they stop pointing
+ * at it (the pattern on stage stays as it is; "Use this version" makes the edited code a revision).
+ * @param {Chat} chat
+ * @param {string} messageId
+ */
+export function detachMessage(chat, messageId) {
+    if (!chat.revisions?.some(r => r.messageId === messageId)) return chat;
+    return {
+        ...chat,
+        revisions: chat.revisions.map(r => {
+            if (r.messageId !== messageId) return r;
+            const copy = { ...r };
+            delete copy.messageId;
+            return copy;
+        }),
+    };
 }
