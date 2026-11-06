@@ -200,6 +200,33 @@ export function parseChatFile(text, { now = new Date(), makeId = generateId } = 
     return { chats, skippedChats, skippedMessages, version, warnings };
 }
 
+/**
+ * An imported file is not trusted to contain code that runs: clear a chat's selected or previous
+ * revision when its code does not parse, so the import can never put broken code into the player
+ * (or behind "Restore previous"). The revisions themselves stay in the chat, and in later exports.
+ * @param {Chat[]} chats cleaned chats from parseChatFile
+ * @param {(code: string) => Promise<string | null>} syntaxError patternSyntaxError (patternCheck.js)
+ * @returns {Promise<{ chats: Chat[], warnings: string[] }>}
+ */
+export async function withoutInvalidStage(chats, syntaxError) {
+    const warnings = [];
+    const checked = [];
+    for (const chat of chats) {
+        let next = chat;
+        for (const key of ['selectedRevisionId', 'previousRevisionId']) {
+            const revision = chat.revisions?.find(r => r.id === chat[key]);
+            if (!revision || !(await syntaxError(revision.code))) continue;
+            next = { ...next };
+            delete next[key];
+            warnings.push(key === 'selectedRevisionId'
+                ? `The pattern in the chat "${chat.name}" has a syntax error, so it was not loaded. It is kept in the chat's data and in exports.`
+                : `The previous pattern in the chat "${chat.name}" has a syntax error, so "Restore previous" is off for it. It is kept in the chat's data and in exports.`);
+        }
+        checked.push(next);
+    }
+    return { chats: checked, warnings };
+}
+
 /** One-line summary of an import for the user. */
 export function describeImport({ chats, skippedChats, skippedMessages, warnings }) {
     const parts = [`Imported ${chats.length} chat${chats.length === 1 ? '' : 's'}.`];

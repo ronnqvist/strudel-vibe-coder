@@ -3,7 +3,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { reportSave, saveFailureEpisode, subscribeSaveStatus } from '../lib/saveStatus';
 import { CHATS_KEY, CURRENT_CHAT_KEY, LEGACY_CODE_KEY, createChat, loadInitialChats, removeChat, resetChats, withMessageIds } from '../lib/chats';
 import { stageCode } from '../lib/revisions';
-import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile } from '../lib/chatFile';
+import { MAX_CHAT_FILE_BYTES, ChatFileError, buildExport, describeImport, exportFileName, parseChatFile, withoutInvalidStage } from '../lib/chatFile';
+import { patternSyntaxError } from '../lib/patternCheck';
 import { downloadText } from '../lib/download';
 
 /** Chat list state, persistence, and import/export. */
@@ -97,7 +98,9 @@ export function useChats() {
                 throw new ChatFileError(`This file is too large to import (limit ${MAX_CHAT_FILE_BYTES / 1024 / 1024} MB).`);
             }
             const result = parseChatFile(await file.text());
-            result.chats = result.chats.map(c => withMessageIds(c));
+            const checked = await withoutInvalidStage(result.chats, code => patternSyntaxError(code));
+            result.chats = checked.chats.map(c => withMessageIds(c));
+            result.warnings.push(...checked.warnings);
             setChats(prev => [...result.chats, ...prev]);
             setCurrentChatId(result.chats[0].id);
             onImported?.();

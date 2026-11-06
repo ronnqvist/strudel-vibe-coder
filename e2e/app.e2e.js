@@ -823,3 +823,23 @@ test.describe('review pass 1b', () => {
         expect(chats[0].revisions.map(r => r.code)).toEqual(['s("aa")', 's("older")']);
     });
 });
+
+test('G3: an imported backup whose pattern does not parse does not load it, and keeps it', async ({ page }) => {
+    await mockNetwork(page);
+    await seedStorage(page, { openrouter_current_code: 's("hh")' });
+    await page.goto('./');
+    await expect.poll(async () => decodeStrudelSrc(await page.locator('iframe').getAttribute('src'))).toBe('s("hh")');
+    const file = { format: 'strudel-vibe-coder-chats', version: 3, chats: [{ id: 'a', name: 'Broken', messages: [], createdAt: '2026-01-01T00:00:00Z',
+        revisions: [{ id: 'bad', code: 's("bd"', origin: 'reply', createdAt: '2026-01-01T00:00:00Z' }], selectedRevisionId: 'bad' }] };
+    const dialogs = [];
+    page.on('dialog', (d) => { dialogs.push(d.message()); d.accept(); });
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await page.locator('input[type=file][accept=".json,application/json"]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toMatch(/The pattern in the chat "Broken" has a syntax error, so it was not loaded/);
+    for (const src of await page.locator('iframe').evaluateAll(els => els.map(e => e.getAttribute('src')))) expect(decodeStrudelSrc(src)).not.toBe('s("bd"');
+    const chats = await page.evaluate(() => JSON.parse(localStorage.getItem('openrouter_chats')));
+    const imported = chats.find(c => c.name === 'Broken');
+    expect(imported.revisions.map(r => r.code)).toEqual(['s("bd"']);
+    expect(imported.selectedRevisionId).toBeUndefined();
+});
