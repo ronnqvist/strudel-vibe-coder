@@ -22,6 +22,9 @@ import { appendMessage, nameAfterFirstMessage, updateMessage } from './lib/chats
 import { generateId } from './lib/utils';
 import { addRevision, detachMessage, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
 
+/** A reply whose code may be put on the stage with "Use latest reply": a completed reply with code. */
+const isUsableReply = (m) => m.role === 'assistant' && messageStatus(m) === 'completed' && Boolean(codeFromMessage(m));
+
 function App() {
     const settings = useSettings();
     const chat = useChats();
@@ -319,7 +322,7 @@ function App() {
                         busyChatIds={requests.busyChatIds}
                         onSelect={(id) => { selectChat(id); setShowChats(false); }}
                         onNew={() => { clearNews(currentChatId); stopEditing(); chat.createNewChat(); setShowChats(false); }}
-                        onImportFile={(file) => { stopEditing(); chat.importChatFile(file, () => setShowChats(false)); }}
+                        onImportFile={(file) => { clearNews(currentChatId); stopEditing(); chat.importChatFile(file, () => setShowChats(false)); }}
                         onExportAll={chat.exportAllChats}
                         onDeleteAll={() => {
                             if (window.confirm("Are you sure you want to delete all chats?")) deleteAllChats();
@@ -388,9 +391,9 @@ function App() {
                     onDismissNotice={() => setNotice(currentChatId, '')}
                     canRestorePrevious={Boolean(previousRevision(currentChat))}
                     onRestorePrevious={restorePreviousVersion}
-                    hasMessagesWithCode={chat.messages.some(m => m.role === 'assistant' && codeFromMessage(m))}
+                    hasMessagesWithCode={chat.messages.some(isUsableReply)}
                     onUseLatestReply={() => {
-                        const latest = [...chat.messages].reverse().find(m => m.role === 'assistant' && messageStatus(m) === 'completed' && codeFromMessage(m));
+                        const latest = [...chat.messages].reverse().find(isUsableReply);
                         if (latest) loadMessageVersion(latest);
                     }}
                     onUseEditedCode={() => setPasteDialog('code')}

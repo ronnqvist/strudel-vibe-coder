@@ -6,7 +6,7 @@ This brief is complete on its own: you don't need access to any repository. Wher
 
 - Upstream: https://github.com/ronnqvist/strudel-vibe-coder (MIT, Copyright (c) 2025-2026 Simon Rönnqvist).
 - The **previous sync** was based on upstream commit `250786e6cbd6ba923d846a186ddfa948574784c9`. This brief is a **delta** from that commit.
-- The **implementation** this brief describes is upstream commit `103ce9fd4a78eda4d86a98c21c86e7138f6649d9`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
+- The **implementation** this brief describes is upstream commit `9f0eff6d4dbc14df1187633a32cbbc990c7f49a4`. That commit contains every module below. If it reaches `main` through a squash merge, the commit on `main` has a different id but the same code.
 - Strudel is a separate AGPL-3.0 project. The app opens https://strudel.cc in an iframe. Do not bundle Strudel code, do not add `@strudel/embed`, and do not read or script the iframe. All of that is unchanged from the previous sync.
 
 The downstream app is its own codebase (TanStack Start). This is not a copy-over: keep its structure, and port the behaviour and the modules below.
@@ -2174,6 +2174,9 @@ import { appendMessage, nameAfterFirstMessage, updateMessage } from './lib/chats
 import { generateId } from './lib/utils';
 import { addRevision, detachMessage, patternForRequest, previousRevision, restorePrevious, selectedRevision } from './lib/revisions';
 
+/** A reply whose code may be put on the stage with "Use latest reply": a completed reply with code. */
+const isUsableReply = (m) => m.role === 'assistant' && messageStatus(m) === 'completed' && Boolean(codeFromMessage(m));
+
 function App() {
     const settings = useSettings();
     const chat = useChats();
@@ -2471,7 +2474,7 @@ function App() {
                         busyChatIds={requests.busyChatIds}
                         onSelect={(id) => { selectChat(id); setShowChats(false); }}
                         onNew={() => { clearNews(currentChatId); stopEditing(); chat.createNewChat(); setShowChats(false); }}
-                        onImportFile={(file) => { stopEditing(); chat.importChatFile(file, () => setShowChats(false)); }}
+                        onImportFile={(file) => { clearNews(currentChatId); stopEditing(); chat.importChatFile(file, () => setShowChats(false)); }}
                         onExportAll={chat.exportAllChats}
                         onDeleteAll={() => {
                             if (window.confirm("Are you sure you want to delete all chats?")) deleteAllChats();
@@ -2540,9 +2543,9 @@ function App() {
                     onDismissNotice={() => setNotice(currentChatId, '')}
                     canRestorePrevious={Boolean(previousRevision(currentChat))}
                     onRestorePrevious={restorePreviousVersion}
-                    hasMessagesWithCode={chat.messages.some(m => m.role === 'assistant' && codeFromMessage(m))}
+                    hasMessagesWithCode={chat.messages.some(isUsableReply)}
                     onUseLatestReply={() => {
-                        const latest = [...chat.messages].reverse().find(m => m.role === 'assistant' && messageStatus(m) === 'completed' && codeFromMessage(m));
+                        const latest = [...chat.messages].reverse().find(isUsableReply);
                         if (latest) loadMessageVersion(latest);
                     }}
                     onUseEditedCode={() => setPasteDialog('code')}
