@@ -18,6 +18,10 @@ the findings and fixes the confirmed ones, with a failing test first.
    - Done for `main` at `5a5b269`. Its 6 findings (G1–G6) were fixed in the follow-up PR.
 3. **Optional fact check of the prompt (Perplexity):** see below. It is cheap with a subscription.
    It checks only the Strudel facts, not the code, because it cannot run the tests.
+   Done on `main` at `6bf5633` (GPT-6.1 Sol, normal search, not Deep Research). Of its 12 points,
+   7 were confirmed in the REPL and fixed (prompt 2.0.2); 3 were contradicted by the REPL (`perc`,
+   the bank list, `.on()`); 2 were left as they are (the error-message hint and the Hydra
+   signatures, which are Hydra's own and correct).
 4. **Regenerate `HANDOFF_GROK_BUILD.md`** from the fixed commit, and give it to Grok Build.
 5. **Pass 2, both apps (Antigravity):** give it `ANTIGRAVITY_REVIEW_PROMPT.md` and the pass 1
    reports, after strudel.grok.me has been updated.
