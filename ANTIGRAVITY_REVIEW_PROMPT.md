@@ -1,6 +1,6 @@
 # Independent review, pass 2: Strudel Vibe Coder (upstream) and strudel.grok.me (downstream)
 
-Run this pass after strudel.grok.me has been updated from `HANDOFF_GROK_BUILD.md`. Pass 1, `ANTIGRAVITY_REVIEW_PROMPT_UPSTREAM.md`, reviews upstream alone before the handoff. If its report exists, read it first and check whether its findings were fixed, both upstream and in the downstream port.
+Run this pass after strudel.grok.me has been updated from `HANDOFF_GROK_BUILD.md`. Pass 1, `ANTIGRAVITY_REVIEW_PROMPT_UPSTREAM.md`, reviews upstream alone before the handoff. If its reports exist (pass 1a, and pass 1b if that was run; see `REVIEW_WORKFLOW.md`), read them first and check whether its findings were fixed, both upstream and in the downstream port.
 
 You are an independent reviewer. Review the **finished state** of two related apps after a round of reliability and prompt work. Report what is still wrong or risky now; do not re-review issues that are already closed. Your output will be filed as GitHub issues, so every finding must stand on its own.
 

@@ -1,5 +1,7 @@
 # Independent review, pass 1: upstream only (Strudel Vibe Coder)
 
+This prompt works with any agent that can clone the repository and run its commands: Antigravity for pass 1a, Codex for pass 1b. `REVIEW_WORKFLOW.md` gives the order.
+
 You are an independent reviewer. Review the **current state** of the upstream app before its changes are handed to the downstream app. The downstream (strudel.grok.me) has **not** been updated yet, so it is out of scope for this pass. A second pass (`ANTIGRAVITY_REVIEW_PROMPT.md`) covers both apps after the downstream sync.
 
 This pass matters because the downstream will copy upstream modules almost verbatim, from the source listings in `HANDOFF_GROK_BUILD.md`. Anything wrong here would be carried over. Report what is still wrong or risky now. Do not re-review the closed issues #5–#8, except to report a regression.
