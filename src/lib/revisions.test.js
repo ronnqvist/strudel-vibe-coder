@@ -142,3 +142,12 @@ describe('the pattern sent with a request (review F1)', () => {
         expect(patternForRequest(c)).toBe('s("bd")');
     });
 });
+
+describe('review F7: reusing a revision for a new message', () => {
+    it('moves the revision to the new message, so its "on stage" mark is right', () => {
+        let c = addRevision(chat(), { code: 's("bd")', origin: 'edited' }, opts()).chat;
+        c = addRevision(c, { code: 's("bd")', origin: 'reply', messageId: 'msg-2', model: 'M' }, opts()).chat;
+        expect(c.revisions).toHaveLength(1);
+        expect(selectedRevision(c)).toMatchObject({ messageId: 'msg-2', origin: 'reply', model: 'M' });
+    });
+});

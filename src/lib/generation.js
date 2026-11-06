@@ -62,16 +62,21 @@ export function announcement(result, load = 'none') {
 
 /**
  * The status of a stored message, including messages saved before `status` existed
- * (`stopped` / `truncated` flags, and error replies stored as plain "Error: ..." text).
+ * (`stopped` / `truncated` / `cutOff` flags, and error replies stored as plain "Error: ..." text or
+ * as partial text ending in "\n\nError: ...").
  * @param {{ role: string, status?: string, stopped?: boolean, truncated?: boolean, content?: string, model?: string }} message
  * @returns {GenerationStatus | undefined} undefined for user messages
  */
 export function messageStatus(message) {
     if (message?.role !== 'assistant') return undefined;
     if (STATUSES.includes(message.status)) return message.status;
-    if (message.truncated) return 'truncated';
+    if (message.truncated || message.cutOff) return 'truncated'; // cutOff: as strudel.grok.me stores it
     if (message.stopped) return 'aborted';
-    if (!message.model && typeof message.content === 'string' && message.content.startsWith('Error: ')) return 'error';
+    if (typeof message.content === 'string') {
+        if (!message.model && message.content.startsWith('Error: ')) return 'error';
+        // strudel.grok.me stored a failed reply as its partial text followed by "\n\nError: …"
+        if (/\n\nError: [^\n]*$/.test(message.content)) return 'error';
+    }
     return 'completed';
 }
 

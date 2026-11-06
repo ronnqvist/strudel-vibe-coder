@@ -90,7 +90,14 @@ function trim(revisions, keep) {
 export function addRevision(chat, { code, origin, messageId, model, repaired }, { makeId = generateId, now = new Date() } = {}) {
     const revisions = Array.isArray(chat.revisions) ? chat.revisions : [];
     const existing = revisions.find(r => r.code === code);
-    if (existing) return { chat: selectRevision(chat, existing.id), revision: existing };
+    if (existing) {
+        // Same code again, from another message: reuse the revision and point it at that message
+        const moved = messageId && existing.messageId !== messageId
+            ? { ...existing, messageId, origin, ...(model && { model }) }
+            : existing;
+        const next = moved === existing ? chat : { ...chat, revisions: revisions.map(r => (r.id === existing.id ? moved : r)) };
+        return { chat: selectRevision(next, existing.id), revision: moved };
+    }
 
     const revision = {
         id: makeId(),

@@ -36,6 +36,9 @@ describe('messageStatus', () => {
         expect(messageStatus({ role: 'assistant', content: 'Error: Invalid key' })).toBe('error');
         expect(messageStatus({ role: 'assistant', content: 'Error: in my code?', model: 'M' })).toBe('completed');
         expect(messageStatus({ role: 'assistant', content: '```js\ns("bd")\n```', model: 'M' })).toBe('completed');
+        // as strudel.grok.me stores them (review F3)
+        expect(messageStatus({ role: 'assistant', content: 'x', model: 'M', cutOff: true })).toBe('truncated');
+        expect(messageStatus({ role: 'assistant', content: 'part of a reply\n\nError: Provider disconnected', model: 'M' })).toBe('error');
     });
 });
 
